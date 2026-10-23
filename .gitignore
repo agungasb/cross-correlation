@@ -1,23 +1,26 @@
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# Python
+# Python / Legacy
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-env/
+.venv/
 venv/
-ENV/
 
-# Logs
+# Next.js / Node
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Environment & OS
+.env
+.env*.local
+.DS_Store
 *.log
-
-# Editor & IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
