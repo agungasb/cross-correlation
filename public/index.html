@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time 3D Phase Space: XAUEUR vs EURUSD vs Time</title>
+  <script src="/plotly.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-panel: #111827;
+      --bg-panel-hover: #1f2937;
+      --border-color: #1f293d;
+      --accent-cyan: #06b6d4;
+      --accent-gold: #f59e0b;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-purple: #8b5cf6;
+      --accent-pink: #ec4899;
+      --accent-emerald: #34d399;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Header & Tickers */
+    header {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-color);
+      padding: 6px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+      gap: 10px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #38bdf8, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .badge {
+      font-size: 0.65rem;
+      padding: 2px 7px;
+      border-radius: 9999px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-live {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-green);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      animation: pulse 2s infinite;
+    }
+
+    .badge-replay {
+      background: rgba(236, 72, 153, 0.2);
+      color: var(--accent-pink);
+      border: 1px solid rgba(236, 72, 153, 0.4);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .ticker-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .ticker-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      padding: 4px 10px;
+      display: flex;
+      flex-direction: column;
+      min-width: 95px;
+    }
+
+    .ticker-label {
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .ticker-value {
+      font-size: 0.95rem;
+      font-weight: 700;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #fff;
+    }
+
+    .formula-pill {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.7rem;
+      color: #fde68a;
+      line-height: 1.25;
+    }
+
+    .formula-pill strong {
+      color: var(--accent-gold);
+    }
+
+    /* Controls Bar 1: Timeframe, Data Stream, Camera, Trail */
+    .controls-bar {
+      background: #0d131f;
+      border-bottom: 1px solid var(--border-color);
+      padding: 5px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 0.8rem;
+    }
+
+    /* Controls Bar 2: Dynamic Axis Stretch */
+    .stretch-bar {
+      background: #080c14;
+      border-bottom: 1px solid var(--border-color);
+      padding: 5px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 0.76rem;
+    }
+
+    .stretch-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .stretch-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .axis-tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 5px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .tag-x {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--accent-gold);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .tag-y {
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+
+    .tag-z {
+      background: rgba(139, 92, 246, 0.2);
+      color: var(--accent-purple);
+      border: 1px solid rgba(139, 92, 246, 0.4);
+    }
+
+    .stretch-num {
+      min-width: 30px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* Controls Bar 3: Indicators Toolbar (Moving Average) */
+    .indicator-bar {
+      background: #0b111e;
+      border-bottom: 1px solid #1c2638;
+      padding: 5px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 0.76rem;
+    }
+
+    .indicator-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .input-field-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+
+    .input-field-wrap input {
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 600;
+      width: 44px;
+      text-align: center;
+      outline: none;
+    }
+
+    .ma-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 4px;
+      padding: 3px 8px;
+    }
+
+    /* Controls Bar 4: Timelapse Replay Toolbar */
+    .replay-bar {
+      background: #111522;
+      border-bottom: 1px solid #232d42;
+      padding: 5px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 0.76rem;
+    }
+
+    .replay-controls {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .btn-replay-play {
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(236, 72, 153, 0.3);
+      transition: all 0.15s ease;
+    }
+
+    .btn-replay-play:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .scrubber-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      max-width: 440px;
+      min-width: 200px;
+    }
+
+    .replay-scrubber {
+      flex: 1;
+      accent-color: var(--accent-pink);
+      cursor: pointer;
+    }
+
+    .replay-time {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 600;
+      color: var(--accent-pink);
+      white-space: nowrap;
+      font-size: 0.74rem;
+    }
+
+    .replay-bar-info {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+
+    .speed-group {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .group-label {
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-right: 2px;
+    }
+
+    .btn {
+      background: var(--bg-panel);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 4px 9px;
+      border-radius: 4px;
+      font-size: 0.76rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-sm {
+      padding: 3px 7px;
+      font-size: 0.72rem;
+    }
+
+    .btn:hover {
+      background: var(--bg-panel-hover);
+      border-color: #374151;
+    }
+
+    .btn.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+    }
+
+    .btn-tf.active {
+      background: #7c3aed;
+      border-color: #a78bfa;
+      color: #fff;
+    }
+
+    .btn-speed.active {
+      background: #db2777;
+      border-color: #f472b6;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .btn-ma.active {
+      background: #059669;
+      border-color: #34d399;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .btn-ma-type.active {
+      background: #10b981;
+      border-color: #34d399;
+      color: #fff;
+    }
+
+    .btn-ma2.active {
+      background: #db2777;
+      border-color: #f472b6;
+      color: #fff;
+    }
+
+    .btn-loop.active {
+      background: #059669;
+      border-color: #34d399;
+      color: #fff;
+    }
+
+    .slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--text-muted);
+      font-size: 0.76rem;
+    }
+
+    input[type="range"] {
+      cursor: pointer;
+      accent-color: var(--accent-cyan);
+      height: 4px;
+      background: #1f293d;
+      border-radius: 2px;
+    }
+
+    #stretch-x { accent-color: var(--accent-gold); }
+    #stretch-y { accent-color: var(--accent-cyan); }
+    #stretch-z { accent-color: var(--accent-purple); }
+
+    /* Main Container */
+    .main-content {
+      display: flex;
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #chart-div {
+      flex: 1;
+      height: 100%;
+      width: 100%;
+    }
+
+    /* Floating Side Panel */
+    .info-overlay {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 300px;
+      background: rgba(17, 24, 39, 0.90);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      font-size: 0.76rem;
+      z-index: 10;
+    }
+
+    .info-overlay h4 {
+      font-size: 0.8rem;
+      color: var(--accent-cyan);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .stat-row:last-child {
+      border-bottom: none;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+    }
+
+    .stat-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 600;
+    }
+
+    .guide-box {
+      margin-top: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 4px;
+      padding: 7px;
+      font-size: 0.7rem;
+      color: #d1d5db;
+      line-height: 1.35;
+    }
+
+    .guide-box code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 1px 3px;
+      border-radius: 3px;
+      color: #f59e0b;
+    }
+
+    /* Loading Spinner */
+    #loading-indicator {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(17, 24, 39, 0.9);
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      color: var(--accent-cyan);
+      font-weight: 600;
+      font-size: 0.85rem;
+      z-index: 50;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation & Live Ticker Bar -->
+  <header>
+    <div class="brand">
+      <span class="brand-title">3D TRIAD PHASE SPACE</span>
+      <span id="conn-badge" class="badge badge-live">LIVE FEED</span>
+    </div>
+
+    <div class="ticker-bar">
+      <div class="ticker-card">
+        <span class="ticker-label">X: XAUEUR (€)</span>
+        <span id="val-xaueur" class="ticker-value">----.--</span>
+      </div>
+      <div class="ticker-card">
+        <span class="ticker-label">Y: EURUSD ($)</span>
+        <span id="val-eurusd" class="ticker-value">-.----</span>
+      </div>
+      <div class="ticker-card">
+        <span class="ticker-label">XAUUSD ($/oz)</span>
+        <span id="val-xauusd" class="ticker-value">----.--</span>
+      </div>
+    </div>
+
+    <div class="formula-pill">
+      <div><strong>Triad Parity:</strong></div>
+      <div>&bull; <code>XAUUSD / XAUEUR = EURUSD</code> | <code>XAUEUR / XAUUSD = USDEUR</code></div>
+    </div>
+  </header>
+
+  <!-- Controls Bar 1: Timeframe, Data Stream, Camera, Trail -->
+  <div class="controls-bar">
+    <div class="btn-group">
+      <span class="group-label">Timeframe:</span>
+      <button id="tf-1m" class="btn btn-tf active" onclick="setTimeframe('1m')">1m</button>
+      <button id="tf-5m" class="btn btn-tf" onclick="setTimeframe('5m')">5m</button>
+      <button id="tf-15m" class="btn btn-tf" onclick="setTimeframe('15m')">15m</button>
+      <button id="tf-1h" class="btn btn-tf" onclick="setTimeframe('1h')">1h</button>
+      <button id="tf-1d" class="btn btn-tf" onclick="setTimeframe('1d')">1D</button>
+    </div>
+
+    <div class="btn-group">
+      <button id="btn-mode-yahoo" class="btn active" onclick="setMode('yahoo')">Yahoo Feed</button>
+      <button id="btn-mode-sim" class="btn" onclick="setMode('sim')">Sim (2 Hz)</button>
+      <button id="btn-playpause" class="btn" onclick="togglePlayPause()">⏸ Live Pause</button>
+    </div>
+
+    <div class="btn-group">
+      <span class="group-label">Camera:</span>
+      <button class="btn" onclick="setCamera('orbit')">3D Orbit</button>
+      <button class="btn" onclick="setCamera('top')">Top (X-Y)</button>
+      <button class="btn" onclick="setCamera('side')">Side (EUR-T)</button>
+      <button class="btn" onclick="setCamera('front')">Front (XAU-T)</button>
+      <button id="btn-rotate" class="btn" onclick="toggleAutoRotate()">Auto-Rotate</button>
+    </div>
+
+    <div class="slider-wrap">
+      <span>Trail Bars:</span>
+      <input type="range" id="trail-slider" min="30" max="800" step="10" value="250" oninput="updateTrailLength(this.value)">
+      <span id="trail-val" style="min-width: 24px; font-weight: 600;">250</span>
+    </div>
+
+    <div class="btn-group">
+      <button id="btn-toggle-contours" class="btn active" onclick="toggleIsoContours()">Iso-Contours</button>
+      <button id="btn-toggle-shadow" class="btn active" onclick="toggleFloorShadow()">Shadow</button>
+    </div>
+  </div>
+
+  <!-- Controls Bar 2: Dynamic Axis Stretch -->
+  <div class="stretch-bar">
+    <div class="stretch-group">
+      <span class="group-label" style="color: #38bdf8; font-weight: 700;">📐 Axis Stretch:</span>
+      
+      <div class="stretch-item">
+        <span class="axis-tag tag-x">Stretch X (€)</span>
+        <input type="range" id="stretch-x" min="0.3" max="3.5" step="0.1" value="1.2" oninput="updateStretch()">
+        <span id="stretch-x-val" class="stretch-num">1.2x</span>
+      </div>
+
+      <div class="stretch-item">
+        <span class="axis-tag tag-y">Stretch Y ($)</span>
+        <input type="range" id="stretch-y" min="0.3" max="3.5" step="0.1" value="1.2" oninput="updateStretch()">
+        <span id="stretch-y-val" class="stretch-num">1.2x</span>
+      </div>
+
+      <div class="stretch-item">
+        <span class="axis-tag tag-z">Stretch Z (Time)</span>
+        <input type="range" id="stretch-z" min="0.2" max="4.0" step="0.1" value="1.0" oninput="updateStretch()">
+        <span id="stretch-z-val" class="stretch-num">1.0x</span>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <span class="group-label">Presets:</span>
+      <button class="btn btn-sm" onclick="applyStretchPreset('time_long')">Elongate Time ⏳</button>
+      <button class="btn btn-sm" onclick="applyStretchPreset('wide_phase')">Wide Phase ↔️</button>
+      <button class="btn btn-sm" onclick="applyStretchPreset('equal')">1:1:1 ⚖️</button>
+      <button class="btn btn-sm" onclick="applyStretchPreset('reset')">Reset 🔄</button>
+    </div>
+  </div>
+
+  <!-- Controls Bar 3: Indicators (3D Moving Average) -->
+  <div class="indicator-bar">
+    <div class="indicator-group">
+      <span class="group-label" style="color: #34d399; font-weight: 700;">📈 Indicator:</span>
+      <button id="btn-toggle-ma" class="btn btn-sm btn-ma active" onclick="toggleMA()">3D MA: ON</button>
+      
+      <div class="input-field-wrap">
+        <span style="color: var(--text-muted); font-size: 0.7rem;">Period:</span>
+        <input type="number" id="ma-period" min="2" max="200" value="20" onchange="onMAPeriodChange(this.value)">
+      </div>
+
+      <div class="btn-group">
+        <button id="btn-ma-sma" class="btn btn-sm btn-ma-type active" onclick="setMAType('SMA')">SMA</button>
+        <button id="btn-ma-ema" class="btn btn-sm btn-ma-type" onclick="setMAType('EMA')">EMA</button>
+      </div>
+
+      <!-- Quick Period Presets -->
+      <div class="btn-group">
+        <button class="btn btn-sm" onclick="setMAPeriod(9)">9</button>
+        <button class="btn btn-sm" onclick="setMAPeriod(20)">20</button>
+        <button class="btn btn-sm" onclick="setMAPeriod(50)">50</button>
+        <button class="btn btn-sm" onclick="setMAPeriod(100)">100</button>
+      </div>
+
+      <!-- Dual Moving Average Toggle (Slow MA) -->
+      <button id="btn-toggle-ma2" class="btn btn-sm btn-ma2" onclick="toggleDualMA()">+ Slow MA (50)</button>
+    </div>
+
+    <!-- MA Phase Displacement Metric -->
+    <div class="ma-pill">
+      <span style="color: var(--text-muted);">MA Phase Deviation:</span>
+      <span id="stat-ma-dist" class="stat-val" style="color: #34d399;">0.00%</span>
+    </div>
+  </div>
+
+  <!-- Controls Bar 4: Timelapse Replay with Custom Speed -->
+  <div class="replay-bar">
+    <div class="replay-controls">
+      <button id="btn-replay-play" class="btn-replay-play" onclick="toggleReplay()">▶ Start Replay</button>
+      <button class="btn btn-sm" onclick="restartReplay()">⏮ Restart</button>
+      <button class="btn btn-sm" onclick="stepReplay(-1)">◀ Step</button>
+      <button class="btn btn-sm" onclick="stepReplay(1)">Step ▶</button>
+      <button class="btn btn-sm" onclick="jumpToLive()">Live ⏭</button>
+      <button id="btn-replay-loop" class="btn btn-sm btn-loop" onclick="toggleReplayLoop()">Loop: OFF</button>
+    </div>
+
+    <div class="scrubber-wrap">
+      <span id="replay-current-time" class="replay-time">---- -- --:--</span>
+      <input type="range" id="replay-scrubber" class="replay-scrubber" min="1" max="100" value="100" oninput="onScrub(this.value)">
+      <span id="replay-bar-info" class="replay-bar-info">Bar 0/0</span>
+    </div>
+
+    <div class="speed-group">
+      <span class="group-label" style="color: var(--accent-pink);">Speed:</span>
+      <button id="spd-1" class="btn btn-sm btn-speed" onclick="setReplaySpeed(1)">1x</button>
+      <button id="spd-2" class="btn btn-sm btn-speed" onclick="setReplaySpeed(2)">2x</button>
+      <button id="spd-5" class="btn btn-sm btn-speed active" onclick="setReplaySpeed(5)">5x</button>
+      <button id="spd-10" class="btn btn-sm btn-speed" onclick="setReplaySpeed(10)">10x</button>
+      <button id="spd-25" class="btn btn-sm btn-speed" onclick="setReplaySpeed(25)">25x</button>
+      <button id="spd-60" class="btn btn-sm btn-speed" onclick="setReplaySpeed(60)">60x</button>
+    </div>
+
+    <div class="btn-group">
+      <button id="btn-trace-accumulate" class="btn btn-sm active" onclick="setReplayTraceMode('accumulate')">Accumulate</button>
+      <button id="btn-trace-window" class="btn btn-sm" onclick="setReplayTraceMode('window')">Sliding Window</button>
+    </div>
+  </div>
+
+  <!-- 3D Visualization Canvas & Overlay -->
+  <div class="main-content">
+    <div id="loading-indicator">Synchronizing Timeframe Bars...</div>
+    <div id="chart-div"></div>
+
+    <div class="info-overlay">
+      <h4>
+        <span id="overlay-title">Triad Phase Metrics</span>
+        <span id="data-source-tag" style="font-size: 0.7rem; color: var(--accent-gold);">1M &bull; LIVE</span>
+      </h4>
+      <div class="stat-row">
+        <span class="stat-label">Bar / Replay Time:</span>
+        <span id="stat-datetime" class="stat-val" style="color: var(--accent-pink);">--:--:--</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Active Timeframe:</span>
+        <span id="stat-tf" class="stat-val" style="color: var(--accent-purple);">1m (1 Day)</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Implied EURUSD:</span>
+        <span id="stat-implied-eur" class="stat-val">-.----</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Market EURUSD:</span>
+        <span id="stat-mkt-eur" class="stat-val">-.----</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Arbitrage Basis (Δ):</span>
+        <span id="stat-basis" class="stat-val" style="color: var(--accent-green);">0.00 pips</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Correlation r(X, Y):</span>
+        <span id="stat-corr" class="stat-val">0.000</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Trail Span:</span>
+        <span id="stat-timespan" class="stat-val">0.0</span>
+      </div>
+      <div class="stat-row" id="row-ma-info">
+        <span class="stat-label" id="label-ma-val">MA(20) Center:</span>
+        <span id="stat-ma-center" class="stat-val" style="color: #34d399;">--</span>
+      </div>
+
+      <div class="guide-box">
+        <strong>3D Moving Average Spine:</strong><br>
+        &bull; <strong>Green Curve:</strong> The smoothed equilibrium attractor $(\text{MA}_X, \text{MA}_Y, t)$.<br>
+        &bull; <strong>Phase Deviation:</strong> Quantifies how far current prices have stretched from moving equilibrium.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State management
+    let currentTimeframe = '1m';
+    let dataSeries = []; // All bars for active timeframe
+    let trailLength = 250;
+    let mode = 'yahoo'; // 'yahoo' or 'sim'
+    let isLivePlaying = true;
+    let autoRotate = false;
+    let rotateAngle = 0;
+    let showContours = true;
+    let showFloorShadow = true;
+    let simInterval = null;
+    let pollInterval = null;
+
+    // Axis Stretch State
+    let scaleX = 1.2;
+    let scaleY = 1.2;
+    let scaleZ = 1.0;
+
+    // Moving Average State
+    let showMA = true;
+    let maPeriod = 20;
+    let maType = 'SMA'; // 'SMA' or 'EMA'
+    let showDualMA = false;
+    let ma2Period = 50;
+
+    // Timelapse Replay State
+    let isReplaying = false;
+    let replayIndex = 0;
+    let replayIndexFloat = 0.0;
+    let replaySpeed = 5;
+    let replayTraceMode = 'accumulate';
+    let isReplayLoop = false;
+    let lastAnimTimestamp = null;
+    let animFrameId = null;
+
+    let lastSimPrice = { xauusd: 2720.0, eurusd: 1.0850 };
+
+    const TF_LABELS = {
+      '1m': '1m (1 Day)',
+      '5m': '5m (5 Days)',
+      '15m': '15m (1 Month)',
+      '1h': '1h (3 Months)',
+      '1d': 'Daily (1 Year)'
+    };
+
+    // Stretch Handler
+    function updateStretch() {
+      scaleX = parseFloat(document.getElementById('stretch-x').value);
+      scaleY = parseFloat(document.getElementById('stretch-y').value);
+      scaleZ = parseFloat(document.getElementById('stretch-z').value);
+
+      document.getElementById('stretch-x-val').innerText = scaleX.toFixed(1) + 'x';
+      document.getElementById('stretch-y-val').innerText = scaleY.toFixed(1) + 'x';
+      document.getElementById('stretch-z-val').innerText = scaleZ.toFixed(1) + 'x';
+
+      Plotly.relayout('chart-div', {
+        'scene.aspectmode': 'manual',
+        'scene.aspectratio.x': scaleX,
+        'scene.aspectratio.y': scaleY,
+        'scene.aspectratio.z': scaleZ
+      });
+    }
+
+    function applyStretchPreset(preset) {
+      if (preset === 'time_long') {
+        scaleX = 1.0; scaleY = 1.0; scaleZ = 2.8;
+      } else if (preset === 'wide_phase') {
+        scaleX = 2.2; scaleY = 2.2; scaleZ = 0.5;
+      } else if (preset === 'equal') {
+        scaleX = 1.0; scaleY = 1.0; scaleZ = 1.0;
+      } else {
+        scaleX = 1.2; scaleY = 1.2; scaleZ = 1.0;
+      }
+
+      document.getElementById('stretch-x').value = scaleX;
+      document.getElementById('stretch-y').value = scaleY;
+      document.getElementById('stretch-z').value = scaleZ;
+      updateStretch();
+    }
+
+    // Moving Average Handlers
+    function toggleMA() {
+      showMA = !showMA;
+      const btn = document.getElementById('btn-toggle-ma');
+      btn.classList.toggle('active', showMA);
+      btn.innerText = showMA ? '3D MA: ON' : '3D MA: OFF';
+      renderChart();
+    }
+
+    function onMAPeriodChange(val) {
+      let p = parseInt(val, 10);
+      if (isNaN(p) || p < 2) p = 2;
+      if (p > 500) p = 500;
+      maPeriod = p;
+      document.getElementById('ma-period').value = p;
+      document.getElementById('label-ma-val').innerText = `MA(${p}) Center:`;
+      renderChart();
+    }
+
+    function setMAPeriod(p) {
+      maPeriod = p;
+      document.getElementById('ma-period').value = p;
+      document.getElementById('label-ma-val').innerText = `MA(${p}) Center:`;
+      renderChart();
+    }
+
+    function setMAType(t) {
+      maType = t;
+      document.getElementById('btn-ma-sma').classList.toggle('active', t === 'SMA');
+      document.getElementById('btn-ma-ema').classList.toggle('active', t === 'EMA');
+      renderChart();
+    }
+
+    function toggleDualMA() {
+      showDualMA = !showDualMA;
+      const btn = document.getElementById('btn-toggle-ma2');
+      btn.classList.toggle('active', showDualMA);
+      btn.innerText = showDualMA ? 'Slow MA (50): ON' : '+ Slow MA (50)';
+      renderChart();
+    }
+
+    // Vector Moving Average Calculation across all bars
+    function computeVectorMA(series, period, type) {
+      const len = series.length;
+      const xMA = new Float64Array(len);
+      const yMA = new Float64Array(len);
+      if (len === 0) return { xMA, yMA };
+
+      if (type === 'EMA') {
+        const k = 2.0 / (period + 1.0);
+        let currX = series[0].xaueur;
+        let currY = series[0].eurusd;
+        xMA[0] = currX;
+        yMA[0] = currY;
+        for (let i = 1; i < len; i++) {
+          currX = (series[i].xaueur * k) + (currX * (1.0 - k));
+          currY = (series[i].eurusd * k) + (currY * (1.0 - k));
+          xMA[i] = currX;
+          yMA[i] = currY;
+        }
+      } else {
+        // SMA
+        let runSumX = 0;
+        let runSumY = 0;
+        for (let i = 0; i < len; i++) {
+          runSumX += series[i].xaueur;
+          runSumY += series[i].eurusd;
+          if (i >= period) {
+            runSumX -= series[i - period].xaueur;
+            runSumY -= series[i - period].eurusd;
+            xMA[i] = runSumX / period;
+            yMA[i] = runSumY / period;
+          } else {
+            xMA[i] = runSumX / (i + 1);
+            yMA[i] = runSumY / (i + 1);
+          }
+        }
+      }
+      return { xMA, yMA };
+    }
+
+    // Load Data
+    async function loadTimeframeData(tf) {
+      showLoading(true);
+      try {
+        const res = await fetch(`/api/history?timeframe=${tf}`);
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          dataSeries = json.data;
+          const latest = dataSeries[dataSeries.length - 1];
+          lastSimPrice.xauusd = latest.xauusd;
+          lastSimPrice.eurusd = latest.eurusd;
+        }
+      } catch (err) {
+        console.warn(`Fallback for timeframe ${tf}:`, err);
+        generateFallbackDataForTimeframe(tf);
+      } finally {
+        showLoading(false);
+      }
+      
+      initReplayScrubber();
+      renderChart();
+    }
+
+    function showLoading(show) {
+      document.getElementById('loading-indicator').style.display = show ? 'block' : 'none';
+    }
+
+    function setTimeframe(tf) {
+      currentTimeframe = tf;
+      document.querySelectorAll('.btn-tf').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById(`tf-${tf}`);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      document.getElementById('stat-tf').innerText = TF_LABELS[tf] || tf;
+      updateStatusBadge();
+
+      if (tf === '1d') {
+        document.getElementById('trail-slider').max = 250;
+        if (trailLength > 250) {
+          trailLength = 200;
+          document.getElementById('trail-slider').value = 200;
+          document.getElementById('trail-val').innerText = '200';
+        }
+      } else {
+        document.getElementById('trail-slider').max = 800;
+      }
+
+      loadTimeframeData(tf);
+    }
+
+    function updateStatusBadge() {
+      const badge = document.getElementById('conn-badge');
+      const tag = document.getElementById('data-source-tag');
+      if (isReplaying) {
+        badge.className = 'badge badge-replay';
+        badge.innerText = 'REPLAYING';
+        tag.innerText = `${currentTimeframe.toUpperCase()} • REPLAY (${replaySpeed}x)`;
+      } else {
+        badge.className = 'badge badge-live';
+        badge.innerText = 'LIVE FEED';
+        tag.innerText = `${currentTimeframe.toUpperCase()} • ${mode.toUpperCase()}`;
+      }
+    }
+
+    function generateFallbackDataForTimeframe(tf) {
+      dataSeries = [];
+      let xau = 2720.0;
+      let eur = 1.0850;
+      const count = tf === '1d' ? 200 : 250;
+      const intervalSec = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '1d': 86400 }[tf] || 60;
+      const now = Math.floor(Date.now() / 1000);
+
+      for (let i = count; i >= 0; i--) {
+        const t = now - (i * intervalSec);
+        xau += (Math.random() - 0.49) * 2.0;
+        eur += (Math.random() - 0.49) * 0.0008;
+        const xae = xau / eur;
+        dataSeries.push({
+          timestamp: t,
+          datetime: tf === '1d' ? new Date(t * 1000).toISOString().substr(0, 10) : new Date(t * 1000).toISOString().substr(11, 8),
+          xauusd: Number(xau.toFixed(2)),
+          eurusd: Number(eur.toFixed(5)),
+          xaueur: Number(xae.toFixed(2)),
+          usdeur: Number((1 / eur).toFixed(5)),
+          source: 'simulated'
+        });
+      }
+      lastSimPrice = { xauusd: xau, eurusd: eur };
+    }
+
+    // Polling backend for live data
+    function startPolling() {
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(async () => {
+        if (!isLivePlaying || mode !== 'yahoo') return;
+        try {
+          const res = await fetch(`/api/live?timeframe=${currentTimeframe}`);
+          const json = await res.json();
+          if (json.latest) {
+            const last = dataSeries[dataSeries.length - 1];
+            if (!last || last.timestamp !== json.latest.timestamp) {
+              dataSeries.push(json.latest);
+              if (dataSeries.length > 2000) dataSeries.shift();
+              if (!isReplaying) {
+                replayIndex = dataSeries.length;
+                initReplayScrubber();
+                renderChart();
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Poll error:', e);
+        }
+      }, 5000);
+    }
+
+    // High frequency simulation mode
+    function startSimulation() {
+      if (simInterval) clearInterval(simInterval);
+      simInterval = setInterval(() => {
+        if (!isLivePlaying || mode !== 'sim') return;
+
+        const z1 = (Math.random() + Math.random() + Math.random() - 1.5) * 0.6;
+        const z2 = 0.35 * z1 + Math.sqrt(1 - 0.35 * 0.35) * (Math.random() + Math.random() + Math.random() - 1.5) * 0.4;
+
+        lastSimPrice.xauusd *= Math.exp(0.00015 * z1);
+        lastSimPrice.eurusd *= Math.exp(0.00008 * z2);
+
+        const xae = lastSimPrice.xauusd / lastSimPrice.eurusd;
+        const nowTs = Math.floor(Date.now() / 1000);
+
+        const point = {
+          timestamp: nowTs,
+          datetime: new Date().toLocaleTimeString(),
+          xauusd: Number(lastSimPrice.xauusd.toFixed(2)),
+          eurusd: Number(lastSimPrice.eurusd.toFixed(5)),
+          xaueur: Number(xae.toFixed(2)),
+          usdeur: Number((1 / lastSimPrice.eurusd).toFixed(5)),
+          source: 'simulated'
+        };
+
+        dataSeries.push(point);
+        if (dataSeries.length > 2000) dataSeries.shift();
+        if (!isReplaying) {
+          replayIndex = dataSeries.length;
+          initReplayScrubber();
+          renderChart();
+        }
+      }, 650);
+    }
+
+    function setMode(newMode) {
+      mode = newMode;
+      document.getElementById('btn-mode-yahoo').classList.toggle('active', mode === 'yahoo');
+      document.getElementById('btn-mode-sim').classList.toggle('active', mode === 'sim');
+      updateStatusBadge();
+
+      if (mode === 'sim') {
+        startSimulation();
+      } else {
+        if (simInterval) clearInterval(simInterval);
+        startPolling();
+      }
+    }
+
+    function togglePlayPause() {
+      isLivePlaying = !isLivePlaying;
+      document.getElementById('btn-playpause').innerText = isLivePlaying ? '⏸ Live Pause' : '▶ Live Resume';
+    }
+
+    function updateTrailLength(val) {
+      trailLength = parseInt(val, 10);
+      document.getElementById('trail-val').innerText = val;
+      renderChart();
+    }
+
+    function toggleIsoContours() {
+      showContours = !showContours;
+      document.getElementById('btn-toggle-contours').classList.toggle('active', showContours);
+      renderChart();
+    }
+
+    function toggleFloorShadow() {
+      showFloorShadow = !showFloorShadow;
+      document.getElementById('btn-toggle-shadow').classList.toggle('active', showFloorShadow);
+      renderChart();
+    }
+
+    // Replay Engine Functions
+    function initReplayScrubber() {
+      const scrubber = document.getElementById('replay-scrubber');
+      const maxIdx = Math.max(1, dataSeries.length);
+      scrubber.min = 1;
+      scrubber.max = maxIdx;
+      if (!isReplaying) {
+        replayIndex = maxIdx;
+        replayIndexFloat = maxIdx;
+        scrubber.value = maxIdx;
+      }
+      updateScrubberUI();
+    }
+
+    function updateScrubberUI() {
+      const scrubber = document.getElementById('replay-scrubber');
+      scrubber.value = replayIndex;
+      const total = dataSeries.length;
+      document.getElementById('replay-bar-info').innerText = `Bar ${replayIndex}/${total}`;
+      
+      if (dataSeries.length > 0 && replayIndex >= 1) {
+        const bar = dataSeries[Math.min(replayIndex - 1, total - 1)];
+        document.getElementById('replay-current-time').innerText = bar.datetime;
+        document.getElementById('stat-datetime').innerText = bar.datetime;
+      }
+    }
+
+    function toggleReplay() {
+      isReplaying = !isReplaying;
+      const btn = document.getElementById('btn-replay-play');
+      
+      if (isReplaying) {
+        btn.innerText = '⏸ Pause Replay';
+        btn.style.background = '#ef4444';
+        if (replayIndex >= dataSeries.length) {
+          replayIndex = 1;
+          replayIndexFloat = 1.0;
+        }
+        lastAnimTimestamp = performance.now();
+        animFrameId = requestAnimationFrame(replayStepLoop);
+      } else {
+        btn.innerText = '▶ Resume Replay';
+        btn.style.background = 'linear-gradient(135deg, #ec4899, #8b5cf6)';
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+      }
+      updateStatusBadge();
+    }
+
+    function replayStepLoop(currentTimestamp) {
+      if (!isReplaying) return;
+
+      if (!lastAnimTimestamp) lastAnimTimestamp = currentTimestamp;
+      const deltaSec = (currentTimestamp - lastAnimTimestamp) / 1000.0;
+      lastAnimTimestamp = currentTimestamp;
+
+      replayIndexFloat += deltaSec * replaySpeed;
+      const targetIndex = Math.min(dataSeries.length, Math.floor(replayIndexFloat));
+
+      if (targetIndex !== replayIndex) {
+        replayIndex = targetIndex;
+        updateScrubberUI();
+        renderChart();
+      }
+
+      if (replayIndex >= dataSeries.length) {
+        if (isReplayLoop) {
+          replayIndex = 1;
+          replayIndexFloat = 1.0;
+          updateScrubberUI();
+          renderChart();
+          animFrameId = requestAnimationFrame(replayStepLoop);
+        } else {
+          isReplaying = false;
+          const btn = document.getElementById('btn-replay-play');
+          btn.innerText = '▶ Replay Finished (Restart)';
+          btn.style.background = 'linear-gradient(135deg, #ec4899, #8b5cf6)';
+          updateStatusBadge();
+          return;
+        }
+      } else {
+        animFrameId = requestAnimationFrame(replayStepLoop);
+      }
+    }
+
+    function onScrub(val) {
+      replayIndex = parseInt(val, 10);
+      replayIndexFloat = replayIndex;
+      updateScrubberUI();
+      renderChart();
+    }
+
+    function restartReplay() {
+      replayIndex = 1;
+      replayIndexFloat = 1.0;
+      updateScrubberUI();
+      renderChart();
+      if (!isReplaying) {
+        toggleReplay();
+      }
+    }
+
+    function stepReplay(direction) {
+      if (isReplaying) toggleReplay();
+      replayIndex = Math.max(1, Math.min(dataSeries.length, replayIndex + direction));
+      replayIndexFloat = replayIndex;
+      updateScrubberUI();
+      renderChart();
+    }
+
+    function jumpToLive() {
+      if (isReplaying) toggleReplay();
+      replayIndex = dataSeries.length;
+      replayIndexFloat = replayIndex;
+      updateScrubberUI();
+      updateStatusBadge();
+      renderChart();
+    }
+
+    function setReplaySpeed(spd) {
+      replaySpeed = spd;
+      document.querySelectorAll('.btn-speed').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById(`spd-${spd}`);
+      if (activeBtn) activeBtn.classList.add('active');
+      updateStatusBadge();
+    }
+
+    function setReplayTraceMode(traceMode) {
+      replayTraceMode = traceMode;
+      document.getElementById('btn-trace-accumulate').classList.toggle('active', traceMode === 'accumulate');
+      document.getElementById('btn-trace-window').classList.toggle('active', traceMode === 'window');
+      renderChart();
+    }
+
+    function toggleReplayLoop() {
+      isReplayLoop = !isReplayLoop;
+      const btn = document.getElementById('btn-replay-loop');
+      btn.classList.toggle('active', isReplayLoop);
+      btn.innerText = isReplayLoop ? 'Loop: ON 🔁' : 'Loop: OFF';
+    }
+
+    // Statistics
+    function calculateCorrelation(xArr, yArr) {
+      const n = xArr.length;
+      if (n < 2) return 0;
+      let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+      for (let i = 0; i < n; i++) {
+        sumX += xArr[i];
+        sumY += yArr[i];
+        sumXY += xArr[i] * yArr[i];
+        sumX2 += xArr[i] * xArr[i];
+        sumY2 += yArr[i] * yArr[i];
+      }
+      const num = (n * sumXY) - (sumX * sumY);
+      const den = Math.sqrt(((n * sumX2) - (sumX * sumX)) * ((n * sumY2) - (sumY * sumY)));
+      return den === 0 ? 0 : num / den;
+    }
+
+    function getTimeUnitConfig(tf, totalSeconds) {
+      if (tf === '1d') {
+        return { unit: 'days', divisor: 86400, label: 'Elapsed Time (days)', fmtSpan: (s) => `${(s / 86400).toFixed(0)} days` };
+      } else if (tf === '1h' || tf === '15m') {
+        return { unit: 'hours', divisor: 3600, label: 'Elapsed Time (hours)', fmtSpan: (s) => `${(s / 3600).toFixed(1)} hours` };
+      } else {
+        return { unit: 'minutes', divisor: 60, label: 'Elapsed Time (minutes)', fmtSpan: (s) => `${(s / 60).toFixed(1)} min` };
+      }
+    }
+
+    // ==========================================
+    // 3D PLOTLY RENDER ENGINE
+    // ==========================================
+    function renderChart() {
+      if (!dataSeries || dataSeries.length === 0) return;
+
+      const effectiveEnd = Math.max(1, Math.min(dataSeries.length, replayIndex || dataSeries.length));
+      
+      let activeSlice;
+      let startIdx;
+      if (replayTraceMode === 'accumulate') {
+        startIdx = Math.max(0, effectiveEnd - 1000);
+        activeSlice = dataSeries.slice(startIdx, effectiveEnd);
+      } else {
+        startIdx = Math.max(0, effectiveEnd - trailLength);
+        activeSlice = dataSeries.slice(startIdx, effectiveEnd);
+      }
+
+      if (activeSlice.length === 0) return;
+
+      const n = activeSlice.length;
+      const latest = activeSlice[n - 1];
+
+      // Update Tickers & Stat Panel
+      document.getElementById('val-xaueur').innerText = latest.xaueur.toFixed(2);
+      document.getElementById('val-eurusd').innerText = latest.eurusd.toFixed(4);
+      document.getElementById('val-xauusd').innerText = latest.xauusd.toFixed(2);
+      document.getElementById('stat-datetime').innerText = latest.datetime;
+
+      const impliedEUR = latest.xauusd / latest.xaueur;
+      const basisPips = ((latest.eurusd - impliedEUR) * 10000).toFixed(2);
+      document.getElementById('stat-implied-eur').innerText = impliedEUR.toFixed(5);
+      document.getElementById('stat-mkt-eur').innerText = latest.eurusd.toFixed(5);
+      document.getElementById('stat-basis').innerText = `${basisPips} pips`;
+
+      const spanSeconds = Math.max(1, latest.timestamp - activeSlice[0].timestamp);
+      const timeCfg = getTimeUnitConfig(currentTimeframe, spanSeconds);
+      document.getElementById('stat-timespan').innerText = timeCfg.fmtSpan(spanSeconds);
+
+      // Coordinates
+      const xVals = activeSlice.map(d => d.xaueur);
+      const yVals = activeSlice.map(d => d.eurusd);
+      const zMinTime = activeSlice[0].timestamp;
+      const zVals = activeSlice.map(d => (d.timestamp - zMinTime) / timeCfg.divisor);
+      const zFloor = 0;
+
+      // Correlation
+      const corr = calculateCorrelation(xVals, yVals);
+      const corrEl = document.getElementById('stat-corr');
+      corrEl.innerText = corr.toFixed(3);
+      corrEl.style.color = corr < 0 ? 'var(--accent-red)' : 'var(--accent-green)';
+
+      // Recency gradient
+      const colorVals = activeSlice.map((_, i) => i / (n - 1 || 1));
+
+      // Compute Moving Average over full series
+      let maXSlice = null;
+      let maYSlice = null;
+      let ma2XSlice = null;
+      let ma2YSlice = null;
+
+      if (showMA) {
+        const { xMA, yMA } = computeVectorMA(dataSeries, maPeriod, maType);
+        maXSlice = xMA.slice(startIdx, effectiveEnd);
+        maYSlice = yMA.slice(startIdx, effectiveEnd);
+
+        // Compute phase deviation at latest point
+        const latestMA_X = maXSlice[n - 1];
+        const latestMA_Y = maYSlice[n - 1];
+        const devX = (latest.xaueur - latestMA_X) / latestMA_X;
+        const devY = (latest.eurusd - latestMA_Y) / latestMA_Y;
+        const phaseDist = Math.sqrt(devX * devX + devY * devY) * 100;
+        
+        document.getElementById('stat-ma-dist').innerText = `${phaseDist.toFixed(2)}%`;
+        document.getElementById('stat-ma-center').innerText = `€${latestMA_X.toFixed(1)} / $${latestMA_Y.toFixed(4)}`;
+      } else {
+        document.getElementById('stat-ma-dist').innerText = `OFF`;
+        document.getElementById('stat-ma-center').innerText = `OFF`;
+      }
+
+      if (showDualMA) {
+        const { xMA, yMA } = computeVectorMA(dataSeries, ma2Period, maType);
+        ma2XSlice = xMA.slice(startIdx, effectiveEnd);
+        ma2YSlice = yMA.slice(startIdx, effectiveEnd);
+      }
+
+      // Hover text
+      const hoverTexts = activeSlice.map((d, i) => {
+        let txt = `<b>Date/Time:</b> ${d.datetime}<br>` +
+                  `<b>XAUEUR (X):</b> €${d.xaueur.toFixed(2)}<br>` +
+                  `<b>EURUSD (Y):</b> $${d.eurusd.toFixed(4)}<br>` +
+                  `<b>XAUUSD:</b> $${d.xauusd.toFixed(2)}<br>` +
+                  `<b>USDEUR (Inv):</b> €${d.usdeur.toFixed(4)}`;
+        if (showMA && maXSlice) {
+          txt += `<br><b>MA(${maPeriod}) X:</b> €${maXSlice[i].toFixed(2)}<br><b>MA(${maPeriod}) Y:</b> $${maYSlice[i].toFixed(4)}`;
+        }
+        return txt;
+      });
+
+      const traces = [];
+
+      // Trace 1: 3D Trajectory Ribbon
+      traces.push({
+        type: 'scatter3d',
+        mode: 'lines+markers',
+        name: 'Trajectory',
+        x: xVals,
+        y: yVals,
+        z: zVals,
+        text: hoverTexts,
+        hoverinfo: 'text',
+        line: {
+          color: colorVals,
+          colorscale: 'Plasma',
+          width: 4
+        },
+        marker: {
+          size: currentTimeframe === '1d' ? 4.5 : 3,
+          color: colorVals,
+          colorscale: 'Plasma',
+          opacity: 0.8
+        }
+      });
+
+      // Trace 2: 3D Moving Average Spine (Primary)
+      if (showMA && maXSlice) {
+        traces.push({
+          type: 'scatter3d',
+          mode: 'lines',
+          name: `${maType}(${maPeriod}) Spine`,
+          x: Array.from(maXSlice),
+          y: Array.from(maYSlice),
+          z: zVals,
+          hoverinfo: 'name',
+          line: {
+            color: '#34d399', // Bright emerald green
+            width: 5.5
+          }
+        });
+
+        // Optional Floor Shadow for MA Spine
+        if (showFloorShadow) {
+          traces.push({
+            type: 'scatter3d',
+            mode: 'lines',
+            name: `${maType}(${maPeriod}) Floor`,
+            x: Array.from(maXSlice),
+            y: Array.from(maYSlice),
+            z: zVals.map(() => zFloor),
+            hoverinfo: 'skip',
+            line: {
+              color: 'rgba(52, 211, 153, 0.4)',
+              width: 2.5
+            }
+          });
+        }
+      }
+
+      // Trace 3: Dual Slow Moving Average (Secondary)
+      if (showDualMA && ma2XSlice) {
+        traces.push({
+          type: 'scatter3d',
+          mode: 'lines',
+          name: `${maType}(${ma2Period}) Slow`,
+          x: Array.from(ma2XSlice),
+          y: Array.from(ma2YSlice),
+          z: zVals,
+          hoverinfo: 'name',
+          line: {
+            color: '#ec4899', // Hot Pink
+            width: 4,
+            dash: 'dash'
+          }
+        });
+      }
+
+      // Trace 4: Replay Head Marker (Pulsing Diamond)
+      traces.push({
+        type: 'scatter3d',
+        mode: 'markers+text',
+        name: 'Head',
+        x: [latest.xaueur],
+        y: [latest.eurusd],
+        z: [zVals[n - 1]],
+        text: [isReplaying ? 'REPLAY' : 'NOW'],
+        textposition: 'top center',
+        textfont: { color: isReplaying ? '#ec4899' : '#38bdf8', size: 11, family: 'sans-serif' },
+        marker: {
+          size: 11,
+          color: isReplaying ? '#ec4899' : '#38bdf8',
+          symbol: 'diamond',
+          line: { color: '#ffffff', width: 2 }
+        },
+        hoverinfo: 'text',
+        hovertext: [`<b>${isReplaying ? 'REPLAY BAR' : 'LATEST BAR'}</b><br>${latest.datetime}<br>XAUEUR: €${latest.xaueur.toFixed(2)}<br>EURUSD: $${latest.eurusd.toFixed(4)}<br>XAUUSD: $${latest.xauusd.toFixed(2)}`]
+      });
+
+      // Trace 5: Floor Shadow & Drop Line
+      if (showFloorShadow) {
+        traces.push({
+          type: 'scatter3d',
+          mode: 'lines',
+          name: 'Floor Projection',
+          x: xVals,
+          y: yVals,
+          z: xVals.map(() => zFloor),
+          hoverinfo: 'skip',
+          line: {
+            color: 'rgba(56, 189, 248, 0.25)',
+            width: 2.5,
+            dash: 'dot'
+          }
+        });
+
+        traces.push({
+          type: 'scatter3d',
+          mode: 'lines',
+          name: 'Drop Line',
+          x: [latest.xaueur, latest.xaueur],
+          y: [latest.eurusd, latest.eurusd],
+          z: [zVals[n - 1], zFloor],
+          hoverinfo: 'skip',
+          line: {
+            color: isReplaying ? 'rgba(236, 72, 153, 0.8)' : 'rgba(245, 158, 11, 0.7)',
+            width: 3,
+            dash: 'dash'
+          }
+        });
+      }
+
+      // Trace 6: Iso-XAUUSD Contours on floor (y = C / x)
+      if (showContours) {
+        const xMin = Math.min(...xVals);
+        const xMax = Math.max(...xVals);
+        const xRange = xMax - xMin || 10;
+        const xSpan = [xMin - (xRange * 0.15), xMax + (xRange * 0.15)];
+        
+        const allGold = activeSlice.map(d => d.xauusd).sort((a, b) => a - b);
+        const gMin = allGold[0];
+        const gMax = allGold[allGold.length - 1];
+        const gMid = allGold[Math.floor(allGold.length / 2)];
+        
+        let goldLevels = [];
+        if (gMax - gMin > 50) {
+          goldLevels = [
+            gMin,
+            gMin + (gMax - gMin) * 0.33,
+            gMid,
+            gMin + (gMax - gMin) * 0.66,
+            gMax
+          ];
+        } else {
+          goldLevels = [latest.xauusd * 0.995, latest.xauusd, latest.xauusd * 1.005];
+        }
+
+        goldLevels.forEach((goldVal, idx) => {
+          const cxVals = [];
+          const cyVals = [];
+          const steps = 30;
+          for (let s = 0; s <= steps; s++) {
+            const gx = xSpan[0] + (s / steps) * (xSpan[1] - xSpan[0]);
+            const gy = goldVal / gx;
+            cxVals.push(gx);
+            cyVals.push(gy);
+          }
+          const isMid = idx === Math.floor(goldLevels.length / 2);
+          traces.push({
+            type: 'scatter3d',
+            mode: 'lines',
+            name: `Gold $${goldVal.toFixed(0)}`,
+            x: cxVals,
+            y: cyVals,
+            z: cxVals.map(() => zFloor),
+            hoverinfo: 'name',
+            line: {
+              color: isMid ? 'rgba(245, 158, 11, 0.55)' : 'rgba(255, 255, 255, 0.18)',
+              width: isMid ? 2.5 : 1.5,
+              dash: isMid ? 'solid' : 'dot'
+            }
+          });
+        });
+      }
+
+      // Layout with dynamic aspectratio stretch
+      const layout = {
+        paper_bgcolor: '#0a0e17',
+        plot_bgcolor: '#0a0e17',
+        showlegend: false,
+        margin: { l: 0, r: 0, b: 0, t: 0 },
+        scene: {
+          xaxis: {
+            title: { text: 'XAUEUR (€/oz)', font: { color: '#f59e0b', size: 12 } },
+            backgroundcolor: '#0e1422',
+            gridcolor: '#1f293d',
+            showbackground: true,
+            tickfont: { color: '#9ca3af', size: 10 }
+          },
+          yaxis: {
+            title: { text: 'EURUSD ($/€)', font: { color: '#38bdf8', size: 12 } },
+            backgroundcolor: '#0e1422',
+            gridcolor: '#1f293d',
+            showbackground: true,
+            tickfont: { color: '#9ca3af', size: 10 }
+          },
+          zaxis: {
+            title: { text: timeCfg.label, font: { color: '#a78bfa', size: 12 } },
+            backgroundcolor: '#0a0e17',
+            gridcolor: '#1f293d',
+            showbackground: true,
+            tickfont: { color: '#9ca3af', size: 10 }
+          },
+          aspectmode: 'manual',
+          aspectratio: { x: scaleX, y: scaleY, z: scaleZ },
+          camera: getCameraSetting()
+        }
+      };
+
+      const config = {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+        modeBarButtonsToRemove: ['resetCameraDefault3d', 'tableRotation']
+      };
+
+      Plotly.react('chart-div', traces, layout, config);
+    }
+
+    // Camera Presets
+    let currentCameraPreset = 'orbit';
+
+    function setCamera(preset) {
+      currentCameraPreset = preset;
+      renderChart();
+    }
+
+    function getCameraSetting() {
+      if (currentCameraPreset === 'top') {
+        return { eye: { x: 0, y: 0, z: 2.3 }, up: { x: 0, y: 1, z: 0 } };
+      } else if (currentCameraPreset === 'side') {
+        return { eye: { x: -2.3, y: 0, z: 0 }, up: { x: 0, y: 0, z: 1 } };
+      } else if (currentCameraPreset === 'front') {
+        return { eye: { x: 0, y: -2.3, z: 0 }, up: { x: 0, y: 0, z: 1 } };
+      } else {
+        return { eye: { x: 1.6, y: -1.7, z: 1.3 } };
+      }
+    }
+
+    // Auto-rotation engine
+    let rotateInterval = null;
+    function toggleAutoRotate() {
+      autoRotate = !autoRotate;
+      const btn = document.getElementById('btn-rotate');
+      btn.classList.toggle('active', autoRotate);
+
+      if (autoRotate) {
+        rotateInterval = setInterval(() => {
+          rotateAngle += 0.02;
+          const r = 2.4;
+          const eye = {
+            x: r * Math.cos(rotateAngle),
+            y: r * Math.sin(rotateAngle),
+            z: 1.2
+          };
+          Plotly.relayout('chart-div', { 'scene.camera.eye': eye });
+        }, 40);
+      } else {
+        if (rotateInterval) clearInterval(rotateInterval);
+      }
+    }
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        toggleReplay();
+      } else if (e.key === 'm' || e.key === 'M') {
+        toggleMA();
+      } else if (e.key === 'ArrowRight') {
+        stepReplay(e.shiftKey ? 10 : 1);
+      } else if (e.key === 'ArrowLeft') {
+        stepReplay(e.shiftKey ? -10 : -1);
+      } else if (e.key === 'l' || e.key === 'L') {
+        toggleReplayLoop();
+      } else if (e.key === ']' || e.key === '}') {
+        scaleZ = Math.min(4.0, scaleZ + 0.2);
+        document.getElementById('stretch-z').value = scaleZ;
+        updateStretch();
+      } else if (e.key === '[' || e.key === '{') {
+        scaleZ = Math.max(0.2, scaleZ - 0.2);
+        document.getElementById('stretch-z').value = scaleZ;
+        updateStretch();
+      } else if (e.key === '+' || e.key === '=') {
+        scaleX = Math.min(3.5, scaleX + 0.2);
+        scaleY = Math.min(3.5, scaleY + 0.2);
+        document.getElementById('stretch-x').value = scaleX;
+        document.getElementById('stretch-y').value = scaleY;
+        updateStretch();
+      } else if (e.key === '-' || e.key === '_') {
+        scaleX = Math.max(0.3, scaleX - 0.2);
+        scaleY = Math.max(0.3, scaleY - 0.2);
+        document.getElementById('stretch-x').value = scaleX;
+        document.getElementById('stretch-y').value = scaleY;
+        updateStretch();
+      }
+    });
+
+    // Bootstrap
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeframe('1m');
+      startPolling();
+    });
+
+    window.addEventListener('resize', () => {
+      Plotly.Plots.resize('chart-div');
+    });
+  </script>
+</body>
+</html>
