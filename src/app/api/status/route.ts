@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCacheSummary, TIMEFRAME_CONFIG } from "@/lib/server/yahoo";
 
+export const dynamic = "force-static";
+
 export async function GET() {
   return NextResponse.json({
     status: "online",

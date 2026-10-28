@@ -3,12 +3,20 @@ import {
   IndicatorParamField,
   MarketBar,
   TimeframeId,
+  TRIAD_CONFIGS,
+  TriadPairId,
 } from "@/types/market";
-import { computeVectorBollinger3D, computeVectorMA } from "./math";
+import {
+  computePhaseGeometry3D,
+  computeSpatialAttractorBasins,
+  computeVectorBollinger3D,
+  computeVectorMA,
+} from "./math";
 
 export type PlotlyTrace = Record<string, unknown>;
 
 export interface IndicatorRenderContext {
+  triadPair?: TriadPairId;
   fullSeries: MarketBar[];
   activeSlice: MarketBar[];
   startIdx: number;
@@ -503,6 +511,7 @@ export const ISO_CONTOURS_PLUGIN: IndicatorPlugin = {
     }
 
     const steps = Number(ctx.params.steps ?? 30);
+    const triad = TRIAD_CONFIGS[ctx.triadPair ?? "EUR"] ?? TRIAD_CONFIGS.EUR;
     const traces: PlotlyTrace[] = [];
 
     goldLevels.forEach((goldVal, idx) => {
@@ -510,7 +519,8 @@ export const ISO_CONTOURS_PLUGIN: IndicatorPlugin = {
       const cyVals: number[] = [];
       for (let s = 0; s <= steps; s++) {
         const gx = xSpan[0] + (s / steps) * (xSpan[1] - xSpan[0]);
-        const gy = goldVal / gx;
+        const gy =
+          triad.quoteMode === "CCY_USD" ? goldVal / gx : gx / goldVal;
         cxVals.push(gx);
         cyVals.push(gy);
       }
@@ -537,10 +547,345 @@ export const ISO_CONTOURS_PLUGIN: IndicatorPlugin = {
   },
 };
 
+export const PHASE_GEOMETRY_PLUGIN: IndicatorPlugin = {
+  id: "phase-geometry-3d",
+  name: "3D Compression Coils & Chirality",
+  shortName: "3D Coils",
+  description:
+    "Highlights high-curvature 3D compression coil nodes and spiral chirality (Lévy area lead-lag) along the trajectory.",
+  category: "volatility",
+  accentColor: "#22d3ee",
+  defaultEnabled: false,
+  defaultParams: {
+    period: 20,
+    coilThreshold: 45,
+    showChiralitySpindle: true,
+  },
+  paramSchema: [
+    {
+      key: "period",
+      label: "Lookback Period",
+      type: "number",
+      min: 5,
+      max: 200,
+      step: 1,
+      presets: [14, 20, 50],
+    },
+    {
+      key: "coilThreshold",
+      label: "Coil Score Min",
+      type: "number",
+      min: 15,
+      max: 85,
+      step: 5,
+      presets: [35, 45, 60],
+    },
+    {
+      key: "showChiralitySpindle",
+      label: "Chirality Spindle",
+      type: "boolean",
+    },
+  ],
+  buildTraces3D(ctx) {
+    const n = ctx.activeSlice.length;
+    if (n === 0) return [];
+    const period = Number(ctx.params.period ?? 20);
+    const coilThreshold = Number(ctx.params.coilThreshold ?? 45);
+    const showSpindle = Boolean(ctx.params.showChiralitySpindle ?? true);
+
+    const geo = computePhaseGeometry3D(ctx.fullSeries, period, period);
+    const coilSlice = geo.coilScore.subarray(ctx.startIdx, ctx.effectiveEnd);
+    const levySlice = geo.levyArea.subarray(ctx.startIdx, ctx.effectiveEnd);
+
+    const coilX: number[] = [];
+    const coilY: number[] = [];
+    const coilZ: number[] = [];
+    const coilHover: string[] = [];
+
+    let peakIdx = 0;
+    let peakScore = -1;
+
+    for (let i = 0; i < n; i++) {
+      const score = coilSlice[i];
+      if (score > peakScore) {
+        peakScore = score;
+        peakIdx = i;
+      }
+      if (score >= coilThreshold) {
+        coilX.push(ctx.xVals[i]);
+        coilY.push(ctx.yVals[i]);
+        coilZ.push(ctx.zVals[i]);
+        coilHover.push(
+          `<b>3D Compression Coil</b><br>Score: ${score.toFixed(1)}/100<br>Lévy Area: ${levySlice[
+            i
+          ].toFixed(2)}`
+        );
+      }
+    }
+
+    if (coilX.length === 0 && n > 0) {
+      coilX.push(ctx.xVals[peakIdx]);
+      coilY.push(ctx.yVals[peakIdx]);
+      coilZ.push(ctx.zVals[peakIdx]);
+      coilHover.push(
+        `<b>Peak Coil Node</b><br>Score: ${coilSlice[peakIdx].toFixed(1)}/100`
+      );
+    }
+
+    const traces: PlotlyTrace[] = [
+      {
+        type: "scatter3d",
+        mode: "markers",
+        name: "3D Compression Coils",
+        x: coilX,
+        y: coilY,
+        z: coilZ,
+        text: coilHover,
+        hoverinfo: "text",
+        marker: {
+          size: 6.5,
+          color: "#22d3ee",
+          symbol: "circle-open",
+          line: {
+            color: "#22d3ee",
+            width: 2.5,
+          },
+        },
+      },
+    ];
+
+    if (showSpindle) {
+      const { xMA, yMA } = computeVectorMA(ctx.fullSeries, period, "SMA");
+      const lastGlobalIdx = ctx.effectiveEnd - 1;
+      const lastLevy = geo.levyArea[lastGlobalIdx] ?? 0;
+      const latest = ctx.activeSlice[n - 1];
+      const zHead = ctx.zVals[n - 1];
+
+      traces.push({
+        type: "scatter3d",
+        mode: "lines",
+        name:
+          lastLevy >= 0
+            ? "Chirality Spindle (CCW: Gold Leads)"
+            : "Chirality Spindle (CW: FX Leads)",
+        x: [xMA[lastGlobalIdx], latest.xaueur],
+        y: [yMA[lastGlobalIdx], latest.eurusd],
+        z: [zHead, zHead],
+        hoverinfo: "name",
+        line: {
+          color: lastLevy >= 0 ? "#34d399" : "#38bdf8",
+          width: 4,
+        },
+      });
+    }
+
+    return traces;
+  },
+  getSummaryReadout(ctx) {
+    if (ctx.activeSlice.length === 0) return null;
+    const period = Number(ctx.params.period ?? 20);
+    const geo = computePhaseGeometry3D(ctx.fullSeries, period, period);
+    const idx = ctx.effectiveEnd - 1;
+    const levy = geo.levyArea[idx] ?? 0;
+    const coil = geo.coilScore[idx] ?? 0;
+    return {
+      label: "Coil / Chirality",
+      value: `${coil.toFixed(0)}/100`,
+      secondaryLabel: "Lévy Area",
+      secondaryValue: `${levy >= 0 ? "+" : ""}${levy.toFixed(2)} (${
+        levy >= 0 ? "CCW" : "CW"
+      })`,
+      color: "#22d3ee",
+    };
+  },
+};
+
+export const CLUSTER_ATTRACTORS_PLUGIN: IndicatorPlugin = {
+  id: "cluster-attractors-3d",
+  name: "3D Cluster Attractor Basins",
+  shortName: "3D Clusters",
+  description:
+    "Partitions the 3D trajectory into K equilibrium consolidation basins with covariance-tilted ellipsoid rings and dwell %.",
+  category: "geometry",
+  accentColor: "#f472b6",
+  defaultEnabled: false,
+  defaultParams: {
+    kBasins: 3,
+    stdRadius: 1.5,
+    showFloorBasins: true,
+  },
+  paramSchema: [
+    {
+      key: "kBasins",
+      label: "Cluster Basins (K)",
+      type: "number",
+      min: 2,
+      max: 5,
+      step: 1,
+      presets: [2, 3, 4],
+    },
+    {
+      key: "stdRadius",
+      label: "Basin Radius (σ)",
+      type: "number",
+      min: 0.8,
+      max: 3.0,
+      step: 0.2,
+      presets: [1.0, 1.5, 2.0],
+    },
+    {
+      key: "showFloorBasins",
+      label: "Z=0 Floor Projection",
+      type: "boolean",
+    },
+  ],
+  buildTraces3D(ctx) {
+    const n = ctx.activeSlice.length;
+    if (n === 0) return [];
+    const kBasins = Number(ctx.params.kBasins ?? 3);
+    const stdRadius = Number(ctx.params.stdRadius ?? 1.5);
+    const showFloorBasins = Boolean(ctx.params.showFloorBasins ?? true);
+    const triad = TRIAD_CONFIGS[ctx.triadPair ?? "EUR"] ?? TRIAD_CONFIGS.EUR;
+
+    const basins = computeSpatialAttractorBasins(
+      ctx.activeSlice,
+      kBasins,
+      ctx.zVals
+    );
+    if (basins.length === 0) return [];
+
+    const ringX: (number | null)[] = [];
+    const ringY: (number | null)[] = [];
+    const ringZ: (number | null)[] = [];
+
+    const floorX: (number | null)[] = [];
+    const floorY: (number | null)[] = [];
+    const floorZ: (number | null)[] = [];
+
+    const centX: number[] = [];
+    const centY: number[] = [];
+    const centZ: number[] = [];
+    const centLabels: string[] = [];
+    const centHover: string[] = [];
+
+    const segments = 24;
+
+    for (const b of basins) {
+      centX.push(b.centerX);
+      centY.push(b.centerY);
+      centZ.push(b.centerZ);
+      centLabels.push(`B${b.id} (${b.dwellPct.toFixed(0)}%)`);
+      centHover.push(
+        `<b>Attractor Basin #${b.id}${
+          b.isCurrentBasin ? " (ACTIVE)" : ""
+        }</b><br>` +
+          `Center ${triad.xTicker}: ${triad.currencySymbol}${b.centerX.toFixed(
+            triad.xDecimals
+          )}<br>` +
+          `Center ${triad.yTicker}: ${b.centerY.toFixed(triad.yDecimals)}<br>` +
+          `Dwell Share: ${b.dwellPct.toFixed(1)}% (${b.dwellCount} bars)<br>` +
+          `Head Dist: ${b.latestSigmaDist.toFixed(2)}σ`
+      );
+
+      const rho = b.corrXY;
+      const orth = Math.sqrt(Math.max(0.05, 1 - rho * rho));
+      const rx = stdRadius * b.stdX;
+      const ry = stdRadius * b.stdY;
+
+      for (let s = 0; s <= segments; s++) {
+        const theta = (2 * Math.PI * s) / segments;
+        const cTheta = Math.cos(theta);
+        const sTheta = Math.sin(theta);
+        // Exact bivariate Gaussian covariance contour via Cholesky factor
+        const px = b.centerX + rx * cTheta;
+        const py = b.centerY + ry * (rho * cTheta + orth * sTheta);
+
+        ringX.push(px);
+        ringY.push(py);
+        ringZ.push(b.centerZ);
+
+        if (showFloorBasins) {
+          floorX.push(px);
+          floorY.push(py);
+          floorZ.push(ctx.zFloor);
+        }
+      }
+
+      ringX.push(null);
+      ringY.push(null);
+      ringZ.push(null);
+
+      if (showFloorBasins) {
+        floorX.push(null);
+        floorY.push(null);
+        floorZ.push(null);
+      }
+    }
+
+    const traces: PlotlyTrace[] = [
+      {
+        type: "scatter3d",
+        mode: "lines",
+        name: `3D Attractor Basins (${stdRadius}σ)`,
+        x: ringX,
+        y: ringY,
+        z: ringZ,
+        hoverinfo: "skip",
+        line: {
+          color: "rgba(244, 114, 182, 0.65)",
+          width: 3,
+        },
+      },
+      {
+        type: "scatter3d",
+        mode: "markers+text",
+        name: "Attractor Centroids",
+        x: centX,
+        y: centY,
+        z: centZ,
+        text: centLabels,
+        textposition: "top center",
+        textfont: {
+          color: "#f472b6",
+          size: 10,
+        },
+        hovertext: centHover,
+        hoverinfo: "text",
+        marker: {
+          size: 6,
+          color: "#f472b6",
+          symbol: "diamond",
+        },
+      },
+    ];
+
+    if (showFloorBasins) {
+      traces.push({
+        type: "scatter3d",
+        mode: "lines",
+        name: "Floor Attractor Basins",
+        x: floorX,
+        y: floorY,
+        z: floorZ,
+        hoverinfo: "skip",
+        line: {
+          color: "rgba(244, 114, 182, 0.28)",
+          width: 2,
+          dash: "dot",
+        },
+      });
+    }
+
+    return traces;
+  },
+};
+
 export const BUILTIN_INDICATOR_PLUGINS: IndicatorPlugin[] = [
   VECTOR_MA_PLUGIN,
   SLOW_MA_PLUGIN,
   BOLLINGER_3D_PLUGIN,
+  PHASE_GEOMETRY_PLUGIN,
+  CLUSTER_ATTRACTORS_PLUGIN,
   ISO_CONTOURS_PLUGIN,
   FLOOR_SHADOW_PLUGIN,
 ];

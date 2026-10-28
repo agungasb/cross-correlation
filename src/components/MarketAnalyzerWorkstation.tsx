@@ -8,16 +8,56 @@ import SynchronizedSubPane2D from "./SynchronizedSubPane2D";
 import InspectorSidebar from "./InspectorSidebar";
 import ReplayTransportBar from "./ReplayTransportBar";
 import FirebaseWorkspaceModal from "./FirebaseWorkspaceModal";
+import TechnicalGuideModal from "./TechnicalGuideModal";
 import { subscribeAuthState } from "@/lib/firebase/client";
-import { MarketBar } from "@/types/market";
+import { getMarketBarsClient } from "@/lib/client/yahooBrowser";
+import {
+  getMarketBarsPythClient,
+  subscribePythLiveStream,
+} from "@/lib/client/pythBrowser";
+import {
+  getMarketBarsBinanceClient,
+  subscribeBinanceLiveStream,
+} from "@/lib/client/binanceBrowser";
+import { MarketBar, TRIAD_CONFIGS, TriadPairId } from "@/types/market";
+
+const INTERVAL_SECONDS: Record<string, number> = {
+  "1m": 60,
+  "5m": 300,
+  "15m": 900,
+  "1h": 3600,
+  "1d": 86400,
+};
+
+function formatUtcBarTime(unixSec: number, isDaily: boolean): string {
+  const d = new Date(unixSec * 1000);
+  if (isDaily) {
+    return d.toISOString().slice(0, 10);
+  }
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+}
 
 export default function MarketAnalyzerWorkstation() {
+  const triadPair = useAnalyzerStore((s) => s.triadPair);
   const timeframe = useAnalyzerStore((s) => s.timeframe);
   const mode = useAnalyzerStore((s) => s.mode);
   const isLivePlaying = useAnalyzerStore((s) => s.isLivePlaying);
   const setDataSeries = useAnalyzerStore((s) => s.setDataSeries);
   const setIsLoading = useAnalyzerStore((s) => s.setIsLoading);
   const appendLiveBar = useAnalyzerStore((s) => s.appendLiveBar);
+  const setSidebarOpen = useAnalyzerStore((s) => s.setSidebarOpen);
+
+  // Auto-collapse Inspector drawer on mobile viewports on first mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, [setSidebarOpen]);
 
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -25,7 +65,11 @@ export default function MarketAnalyzerWorkstation() {
   const [isFirebaseConfigured, setIsFirebaseConfigured] = useState(false);
   const [fbConfigTick, setFbConfigTick] = useState(0);
 
-  const lastSimPriceRef = useRef({ xauusd: 2720.0, eurusd: 1.085 });
+  const lastSimPriceRef = useRef({
+    xauusd: 4010.0,
+    eurusd: 1.1212,
+    timestamp: Math.floor(Date.now() / 1000),
+  });
 
   // Subscribe to Firebase Auth
   useEffect(() => {
@@ -38,58 +82,69 @@ export default function MarketAnalyzerWorkstation() {
   }, [fbConfigTick]);
 
   // Client-side fallback generator if network fails completely
-  const generateLocalFallback = useCallback((tf: string): MarketBar[] => {
-    const count = tf === "1d" ? 200 : 250;
-    const intervalSec =
-      { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400 }[tf] ?? 60;
-    const now = Math.floor(Date.now() / 1000);
-    let xau = 2720.0;
-    let eur = 1.085;
-    const out: MarketBar[] = [];
+  const generateLocalFallback = useCallback(
+    (tf: string, pair: TriadPairId): MarketBar[] => {
+      const triad = TRIAD_CONFIGS[pair] ?? TRIAD_CONFIGS.EUR;
+      const count = tf === "1d" ? 200 : 250;
+      const intervalSec = INTERVAL_SECONDS[tf] ?? 60;
+      const now = Math.floor(Date.now() / 1000);
+      let xau = 4010.0;
+      let fx = triad.defaultFxRate;
+      const volScale = Math.sqrt(intervalSec / 60.0);
+      const out: MarketBar[] = [];
 
-    for (let i = count; i >= 0; i--) {
-      const t = now - i * intervalSec;
-      xau += (Math.random() - 0.49) * 2.0;
-      eur += (Math.random() - 0.49) * 0.0008;
-      const xae = xau / eur;
-      out.push({
-        timestamp: t,
-        datetime:
-          tf === "1d"
-            ? new Date(t * 1000).toISOString().slice(0, 10)
-            : new Date(t * 1000).toISOString().slice(11, 19),
-        xauusd: Number(xau.toFixed(2)),
-        eurusd: Number(eur.toFixed(5)),
-        xaueur: Number(xae.toFixed(2)),
-        usdeur: Number((1 / eur).toFixed(5)),
-        source: "simulated",
-      });
-    }
-    lastSimPriceRef.current = { xauusd: xau, eurusd: eur };
-    return out;
-  }, []);
+      for (let i = count; i >= 0; i--) {
+        const t = now - i * intervalSec;
+        xau *= Math.exp((Math.random() - 0.495) * 0.0003 * volScale);
+        fx *= Math.exp((Math.random() - 0.495) * 0.00018 * volScale);
+        const cross =
+          triad.quoteMode === "CCY_USD" ? xau / fx : xau * fx;
+        out.push({
+          timestamp: t,
+          datetime: formatUtcBarTime(t, tf === "1d"),
+          xauusd: Number(xau.toFixed(2)),
+          eurusd: Number(fx.toFixed(triad.yDecimals + 1)),
+          xaueur: Number(cross.toFixed(triad.xDecimals)),
+          usdeur: Number((1 / fx).toFixed(6)),
+          source: "simulated",
+        });
+      }
+      lastSimPriceRef.current = { xauusd: xau, eurusd: fx, timestamp: now };
+      return out;
+    },
+    []
+  );
 
-  // Fetch timeframe history
+  // Fetch timeframe & triad pair history for the active provider ("yahoo", "pyth", or "binance")
+  const activeFeedProvider =
+    mode === "pyth" ? "pyth" : mode === "binance" ? "binance" : "yahoo";
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/history?timeframe=${timeframe}`);
-        const json = await res.json();
-        if (!cancelled && Array.isArray(json.data) && json.data.length > 0) {
-          setDataSeries(json.data);
-          const latest = json.data[json.data.length - 1];
+        const bars =
+          activeFeedProvider === "pyth"
+            ? await getMarketBarsPythClient(timeframe, triadPair, false)
+            : activeFeedProvider === "binance"
+            ? await getMarketBarsBinanceClient(timeframe, triadPair, false)
+            : await getMarketBarsClient(timeframe, triadPair, false);
+
+        if (!cancelled && bars.length > 0) {
+          setDataSeries(bars);
+          const latest = bars[bars.length - 1];
           lastSimPriceRef.current = {
             xauusd: latest.xauusd,
             eurusd: latest.eurusd,
+            timestamp: latest.timestamp,
           };
         } else if (!cancelled) {
-          setDataSeries(generateLocalFallback(timeframe));
+          setDataSeries(generateLocalFallback(timeframe, triadPair));
         }
       } catch {
         if (!cancelled) {
-          setDataSeries(generateLocalFallback(timeframe));
+          setDataSeries(generateLocalFallback(timeframe, triadPair));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -99,60 +154,209 @@ export default function MarketAnalyzerWorkstation() {
     return () => {
       cancelled = true;
     };
-  }, [timeframe, setDataSeries, setIsLoading, generateLocalFallback]);
+  }, [
+    timeframe,
+    triadPair,
+    activeFeedProvider,
+    setDataSeries,
+    setIsLoading,
+    generateLocalFallback,
+  ]);
 
-  // Yahoo Live Feed Polling (5s)
+  // Yahoo Live Feed Auto-Update Polling (10s + Instant Mobile Wakeup Refresh)
   useEffect(() => {
     if (!isLivePlaying || mode !== "yahoo") return;
-    const id = setInterval(async () => {
+
+    const refreshLiveYahoo = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       try {
-        const res = await fetch(`/api/live?timeframe=${timeframe}`);
-        const json = await res.json();
-        if (json?.latest) {
-          appendLiveBar(json.latest);
+        const bars = await getMarketBarsClient(timeframe, triadPair, true);
+        if (bars.length > 0 && bars[0].source === "yahoo") {
+          const state = useAnalyzerStore.getState();
+          if (state.isReplaying) {
+            useAnalyzerStore.setState({ dataSeries: bars });
+          } else {
+            state.setDataSeries(bars);
+          }
+          const latest = bars[bars.length - 1];
           lastSimPriceRef.current = {
-            xauusd: json.latest.xauusd,
-            eurusd: json.latest.eurusd,
+            xauusd: latest.xauusd,
+            eurusd: latest.eurusd,
+            timestamp: latest.timestamp,
           };
         }
       } catch {
         // ignore transient poll errors
       }
-    }, 5000);
-    return () => clearInterval(id);
-  }, [timeframe, isLivePlaying, mode, appendLiveBar]);
+    };
 
-  // High-Frequency Simulation Feed (650ms / ~2Hz)
+    const id = setInterval(refreshLiveYahoo, 10000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshLiveYahoo();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [timeframe, triadPair, isLivePlaying, mode]);
+
+  // Pyth Network Real-Time Hermes SSE Stream + Background Benchmarks Sync
+  useEffect(() => {
+    if (!isLivePlaying || mode !== "pyth") return;
+
+    const unsubStream = subscribePythLiveStream(
+      triadPair,
+      timeframe,
+      (liveBar) => {
+        lastSimPriceRef.current = {
+          xauusd: liveBar.xauusd,
+          eurusd: liveBar.eurusd,
+          timestamp: liveBar.timestamp,
+        };
+        appendLiveBar(liveBar);
+      },
+      () => lastSimPriceRef.current.eurusd
+    );
+
+    const refreshPythHistory = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        const bars = await getMarketBarsPythClient(timeframe, triadPair, true);
+        if (bars.length > 0 && bars[0].source === "pyth") {
+          const state = useAnalyzerStore.getState();
+          if (state.isReplaying) {
+            useAnalyzerStore.setState({ dataSeries: bars });
+          } else {
+            state.setDataSeries(bars);
+          }
+          const latest = bars[bars.length - 1];
+          lastSimPriceRef.current = {
+            xauusd: latest.xauusd,
+            eurusd: latest.eurusd,
+            timestamp: latest.timestamp,
+          };
+        }
+      } catch {
+        // ignore transient poll errors
+      }
+    };
+
+    const id = setInterval(refreshPythHistory, 30000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshPythHistory();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      unsubStream();
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [timeframe, triadPair, isLivePlaying, mode, appendLiveBar]);
+
+  // Binance Vision Public CDN Live Stream + Background Sync
+  useEffect(() => {
+    if (!isLivePlaying || mode !== "binance") return;
+
+    const unsubStream = subscribeBinanceLiveStream(
+      triadPair,
+      timeframe,
+      () => lastSimPriceRef.current.eurusd,
+      (liveBar) => {
+        lastSimPriceRef.current = {
+          xauusd: liveBar.xauusd,
+          eurusd: liveBar.eurusd,
+          timestamp: liveBar.timestamp,
+        };
+        appendLiveBar(liveBar);
+      }
+    );
+
+    const refreshBinanceHistory = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        const bars = await getMarketBarsBinanceClient(
+          timeframe,
+          triadPair,
+          true
+        );
+        if (bars.length > 0 && bars[0].source === "binance") {
+          const state = useAnalyzerStore.getState();
+          if (state.isReplaying) {
+            useAnalyzerStore.setState({ dataSeries: bars });
+          } else {
+            state.setDataSeries(bars);
+          }
+          const latest = bars[bars.length - 1];
+          lastSimPriceRef.current = {
+            xauusd: latest.xauusd,
+            eurusd: latest.eurusd,
+            timestamp: latest.timestamp,
+          };
+        }
+      } catch {
+        // ignore transient poll errors
+      }
+    };
+
+    const id = setInterval(refreshBinanceHistory, 20000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshBinanceHistory();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      unsubStream();
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [timeframe, triadPair, isLivePlaying, mode, appendLiveBar]);
+
+  // Timeframe-Aware & Triad-Pair-Aware Simulation Feed (650ms / ~2Hz)
   useEffect(() => {
     if (!isLivePlaying || mode !== "sim") return;
+    const triad = TRIAD_CONFIGS[triadPair] ?? TRIAD_CONFIGS.EUR;
+    const intervalSec = INTERVAL_SECONDS[timeframe] ?? 60;
+    const volScale = Math.sqrt(intervalSec / 60.0);
+    const rho = triad.quoteMode === "CCY_USD" ? 0.35 : -0.35;
+    const rhoComp = Math.sqrt(1 - rho * rho);
+
     const id = setInterval(() => {
       const z1 = (Math.random() + Math.random() + Math.random() - 1.5) * 0.6;
-      const z2 =
-        0.35 * z1 +
-        Math.sqrt(1 - 0.35 * 0.35) *
-          (Math.random() + Math.random() + Math.random() - 1.5) *
-          0.4;
+      const zIndep =
+        (Math.random() + Math.random() + Math.random() - 1.5) * 0.6;
+      const z2 = rho * z1 + rhoComp * zIndep;
 
-      lastSimPriceRef.current.xauusd *= Math.exp(0.00015 * z1);
-      lastSimPriceRef.current.eurusd *= Math.exp(0.00008 * z2);
+      lastSimPriceRef.current.xauusd *= Math.exp(0.00015 * volScale * z1);
+      lastSimPriceRef.current.eurusd *= Math.exp(0.00008 * volScale * z2);
+      lastSimPriceRef.current.timestamp += intervalSec;
 
       const xau = lastSimPriceRef.current.xauusd;
-      const eur = lastSimPriceRef.current.eurusd;
-      const xae = xau / eur;
-      const nowTs = Math.floor(Date.now() / 1000);
+      const fx = lastSimPriceRef.current.eurusd;
+      const cross =
+        triad.quoteMode === "CCY_USD" ? xau / fx : xau * fx;
+      const nextTs = lastSimPriceRef.current.timestamp;
 
       appendLiveBar({
-        timestamp: nowTs,
-        datetime: new Date().toLocaleTimeString(),
+        timestamp: nextTs,
+        datetime: formatUtcBarTime(nextTs, timeframe === "1d"),
         xauusd: Number(xau.toFixed(2)),
-        eurusd: Number(eur.toFixed(5)),
-        xaueur: Number(xae.toFixed(2)),
-        usdeur: Number((1 / eur).toFixed(5)),
+        eurusd: Number(fx.toFixed(triad.yDecimals + 1)),
+        xaueur: Number(cross.toFixed(triad.xDecimals)),
+        usdeur: Number((1 / fx).toFixed(6)),
         source: "simulated",
       });
     }, 650);
     return () => clearInterval(id);
-  }, [isLivePlaying, mode, appendLiveBar]);
+  }, [timeframe, triadPair, isLivePlaying, mode, appendLiveBar]);
 
   // Global Workstation Keyboard Shortcuts
   useEffect(() => {
@@ -187,21 +391,21 @@ export default function MarketAnalyzerWorkstation() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0a0e17] text-[#f3f4f6]">
+    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[#0a0e17] text-[#f3f4f6]">
       <TopCommandBar
         onOpenWorkspaceModal={() => setWorkspaceModalOpen(true)}
         cloudUserEmail={userEmail}
         isFirebaseConfigured={isFirebaseConfigured}
       />
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="relative flex flex-1 min-h-0 overflow-hidden">
         {/* Center Multi-Panel Viewport (3D Phase Space + Synchronized 2D Sub-Pane) */}
         <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
           <PhaseSpace3DCanvas />
           <SynchronizedSubPane2D />
         </div>
 
-        {/* Right Docked Quant Inspector Sidebar */}
+        {/* Right Docked Quant Inspector Sidebar (Bottom Drawer on Mobile) */}
         <InspectorSidebar />
       </div>
 
@@ -215,6 +419,8 @@ export default function MarketAnalyzerWorkstation() {
         isFirebaseConfigured={isFirebaseConfigured}
         onFirebaseConfigUpdated={() => setFbConfigTick((t) => t + 1)}
       />
+
+      <TechnicalGuideModal />
     </div>
   );
 }

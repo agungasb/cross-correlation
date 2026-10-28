@@ -8,11 +8,13 @@ import {
   ReplayTraceMode,
   SubPaneMode,
   TimeframeId,
+  TriadPairId,
   WorkspaceSnapshot,
 } from "@/types/market";
 import { createDefaultIndicatorConfigs } from "@/lib/quant/plugins";
 
 export interface AnalyzerState {
+  triadPair: TriadPairId;
   timeframe: TimeframeId;
   dataSeries: MarketBar[];
   isLoading: boolean;
@@ -26,6 +28,7 @@ export interface AnalyzerState {
   subPaneMode: SubPaneMode;
   sidebarOpen: boolean;
   activeSidebarTab: "indicators" | "scene" | "stats";
+  guideModalOpen: boolean;
 
   // Timelapse Replay State
   isReplaying: boolean;
@@ -35,6 +38,7 @@ export interface AnalyzerState {
   isReplayLoop: boolean;
 
   // Actions
+  setTriadPair: (pair: TriadPairId) => void;
   setTimeframe: (tf: TimeframeId) => void;
   setDataSeries: (bars: MarketBar[]) => void;
   setIsLoading: (loading: boolean) => void;
@@ -58,6 +62,7 @@ export interface AnalyzerState {
   setSubPaneMode: (mode: SubPaneMode) => void;
   setSidebarOpen: (open: boolean) => void;
   setActiveSidebarTab: (tab: "indicators" | "scene" | "stats") => void;
+  setGuideModalOpen: (open: boolean) => void;
 
   // Replay Actions
   setIsReplaying: (playing: boolean) => void;
@@ -76,6 +81,7 @@ export interface AnalyzerState {
 }
 
 export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
+  triadPair: "EUR",
   timeframe: "1m",
   dataSeries: [],
   isLoading: true,
@@ -89,12 +95,19 @@ export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
   subPaneMode: "displacement",
   sidebarOpen: true,
   activeSidebarTab: "indicators",
+  guideModalOpen: false,
 
   isReplaying: false,
   replayIndex: 0,
   replaySpeed: 5,
   replayTraceMode: "accumulate",
   isReplayLoop: false,
+
+  setTriadPair: (pair) =>
+    set({
+      triadPair: pair,
+      isReplaying: false,
+    }),
 
   setTimeframe: (tf) =>
     set((state) => {
@@ -206,6 +219,8 @@ export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
 
   setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
 
+  setGuideModalOpen: (open) => set({ guideModalOpen: open }),
+
   setIsReplaying: (playing) => set({ isReplaying: playing }),
 
   toggleReplay: () =>
@@ -260,6 +275,7 @@ export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
       id: `ws_${Date.now().toString(36)}`,
       name: name.trim() || "Custom Quant Workspace",
       updatedAt: Date.now(),
+      triadPair: s.triadPair,
       timeframe: s.timeframe,
       trailLength: s.trailLength,
       stretch: { ...s.stretch },
@@ -273,6 +289,7 @@ export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
 
   applyWorkspaceSnapshot: (snap) =>
     set((state) => ({
+      triadPair: snap.triadPair ?? state.triadPair,
       timeframe: snap.timeframe ?? state.timeframe,
       trailLength: snap.trailLength ?? state.trailLength,
       stretch: snap.stretch ?? state.stretch,

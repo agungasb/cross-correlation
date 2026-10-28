@@ -1,4 +1,10 @@
-import { MarketBar, TimeframeId, TimeframeMeta } from "@/types/market";
+import {
+  MarketBar,
+  TimeframeId,
+  TimeframeMeta,
+  TRIAD_CONFIGS,
+  TriadPairId,
+} from "@/types/market";
 
 export const TIMEFRAME_CONFIG: Record<TimeframeId, TimeframeMeta> = {
   "1m": {
@@ -48,14 +54,19 @@ interface CacheEntry {
   lastFetch: number;
 }
 
-const DATA_CACHE: Partial<Record<TimeframeId, CacheEntry>> = {};
+const DATA_CACHE: Record<string, CacheEntry> = {};
 
 function formatUtcTimestamp(unixSec: number, isDaily: boolean): string {
-  const iso = new Date(unixSec * 1000).toISOString();
+  const d = new Date(unixSec * 1000);
   if (isDaily) {
-    return iso.slice(0, 10);
+    return d.toISOString().slice(0, 10);
   }
-  return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
 }
 
 async function fetchYahooChart(
@@ -109,9 +120,6 @@ async function fetchYahooChart(
   }
 }
 
-/**
- * Deterministic-seeded Box-Muller Gaussian generator for realistic fallback bars
- */
 function createSeededGaussian(seedInit: number): () => number {
   let seed = seedInit >>> 0;
   const nextUniform = () => {
@@ -125,8 +133,12 @@ function createSeededGaussian(seedInit: number): () => number {
   };
 }
 
-export function generateFallbackTimeframe(tf: TimeframeId): MarketBar[] {
+export function generateFallbackTimeframe(
+  tf: TimeframeId,
+  pair: TriadPairId = "EUR"
+): MarketBar[] {
   const cfg = TIMEFRAME_CONFIG[tf] ?? TIMEFRAME_CONFIG["1m"];
+  const triad = TRIAD_CONFIGS[pair] ?? TRIAD_CONFIGS.EUR;
   const countMap: Record<TimeframeId, number> = {
     "1m": 300,
     "5m": 300,
@@ -139,12 +151,15 @@ export function generateFallbackTimeframe(tf: TimeframeId): MarketBar[] {
   const alignedNow = now - (now % cfg.intervalSec);
   const startTime = alignedNow - count * cfg.intervalSec;
 
-  let currXauusd = 2720.0;
-  let currEurusd = 1.085;
+  let currXauusd = 4010.0;
+  let currFx = triad.defaultFxRate;
   const volScale = Math.sqrt(cfg.intervalSec / 60.0);
-  const randn = createSeededGaussian(1337 + cfg.intervalSec);
+  const randn = createSeededGaussian(
+    1337 + cfg.intervalSec + pair.charCodeAt(0) * 97
+  );
 
-  const rho = 0.35;
+  // CCY_USD pairs positively correlate with XAUUSD; USD_CCY pairs negatively correlate with XAUUSD
+  const rho = triad.quoteMode === "CCY_USD" ? 0.35 : -0.35;
   const rhoComp = Math.sqrt(1 - rho * rho);
   const bars: MarketBar[] = [];
 
@@ -152,23 +167,27 @@ export function generateFallbackTimeframe(tf: TimeframeId): MarketBar[] {
     const t = startTime + i * cfg.intervalSec;
     const z1 = randn();
     const z2 = rho * z1 + rhoComp * randn();
-    const basisNoise = randn() * 0.15;
 
     currXauusd *= Math.exp(0.00015 * volScale * z1);
-    currEurusd *= Math.exp(0.00008 * volScale * z2);
+    currFx *= Math.exp(0.00008 * volScale * z2);
 
-    const syntheticXaueur = currXauusd / currEurusd;
-    const marketXaueur = syntheticXaueur + basisNoise;
-    const usdeur = 1.0 / currEurusd;
+    const syntheticCross =
+      triad.quoteMode === "CCY_USD"
+        ? currXauusd / currFx
+        : currXauusd * currFx;
+    const basisNoise =
+      randn() * (triad.quoteMode === "USD_CCY" && pair === "JPY" ? 18.0 : 0.15);
+    const marketCross = syntheticCross + basisNoise;
+    const invFx = 1.0 / currFx;
 
     bars.push({
       timestamp: t,
       datetime: formatUtcTimestamp(t, tf === "1d"),
       xauusd: Number(currXauusd.toFixed(2)),
-      eurusd: Number(currEurusd.toFixed(5)),
-      xaueur: Number(syntheticXaueur.toFixed(2)),
-      marketXaueur: Number(marketXaueur.toFixed(2)),
-      usdeur: Number(usdeur.toFixed(5)),
+      eurusd: Number(currFx.toFixed(triad.yDecimals + 1)),
+      xaueur: Number(syntheticCross.toFixed(triad.xDecimals)),
+      marketXaueur: Number(marketCross.toFixed(triad.xDecimals)),
+      usdeur: Number(invFx.toFixed(6)),
       source: "simulated",
     });
   }
@@ -178,30 +197,37 @@ export function generateFallbackTimeframe(tf: TimeframeId): MarketBar[] {
 
 export async function getOrUpdateTimeframe(
   rawTf: string,
-  force = false
+  force = false,
+  rawPair = "EUR"
 ): Promise<MarketBar[]> {
   const tf: TimeframeId =
     rawTf in TIMEFRAME_CONFIG ? (rawTf as TimeframeId) : "1m";
+  const pair: TriadPairId =
+    rawPair in TRIAD_CONFIGS ? (rawPair as TriadPairId) : "EUR";
   const cfg = TIMEFRAME_CONFIG[tf];
+  const triad = TRIAD_CONFIGS[pair];
+  const cacheKey = `${pair}_${tf}`;
   const nowSec = Date.now() / 1000;
 
-  const cached = DATA_CACHE[tf];
+  const cached = DATA_CACHE[cacheKey];
   if (cached && !force && nowSec - cached.lastFetch < cfg.ttl) {
     return cached.data;
   }
 
-  const [gcBars, euBars, xauEurBars] = await Promise.all([
+  const [gcBars, fxBars, crossGoldBars] = await Promise.all([
     fetchYahooChart("GC=F", cfg.interval, cfg.range),
-    fetchYahooChart("EURUSD=X", cfg.interval, cfg.range),
-    fetchYahooChart("XAUEUR=X", cfg.interval, cfg.range),
+    fetchYahooChart(triad.yahooFxSymbol, cfg.interval, cfg.range),
+    triad.yahooCrossGoldSymbol
+      ? fetchYahooChart(triad.yahooCrossGoldSymbol, cfg.interval, cfg.range)
+      : Promise.resolve(new Map<number, number>()),
   ]);
 
-  if (gcBars.size === 0 || euBars.size === 0) {
+  if (gcBars.size === 0 || fxBars.size === 0) {
     if (cached && cached.data.length > 0) {
       return cached.data;
     }
-    const fallback = generateFallbackTimeframe(tf);
-    DATA_CACHE[tf] = { data: fallback, lastFetch: nowSec };
+    const fallback = generateFallbackTimeframe(tf, pair);
+    DATA_CACHE[cacheKey] = { data: fallback, lastFetch: nowSec };
     return fallback;
   }
 
@@ -209,59 +235,67 @@ export async function getOrUpdateTimeframe(
 
   if (cfg.interval === "1d") {
     const gcDates = new Map<string, [number, number]>();
-    const euDates = new Map<string, [number, number]>();
-    const xeDates = new Map<string, number>();
+    const fxDates = new Map<string, [number, number]>();
+    const cgDates = new Map<string, number>();
 
     for (const [t, c] of gcBars.entries()) {
       gcDates.set(formatUtcTimestamp(t, true), [t, c]);
     }
-    for (const [t, c] of euBars.entries()) {
-      euDates.set(formatUtcTimestamp(t, true), [t, c]);
+    for (const [t, c] of fxBars.entries()) {
+      fxDates.set(formatUtcTimestamp(t, true), [t, c]);
     }
-    for (const [t, c] of xauEurBars.entries()) {
-      xeDates.set(formatUtcTimestamp(t, true), c);
+    for (const [t, c] of crossGoldBars.entries()) {
+      cgDates.set(formatUtcTimestamp(t, true), c);
     }
 
     const commonDates = Array.from(gcDates.keys())
-      .filter((d) => euDates.has(d))
+      .filter((d) => fxDates.has(d))
       .sort();
 
     for (const d of commonDates) {
       const [tBar, xau] = gcDates.get(d)!;
-      const [, eur] = euDates.get(d)!;
-      const mktXe = xeDates.get(d);
-      const synthXe = xau / eur;
+      const [, fx] = fxDates.get(d)!;
+      const mktCross = cgDates.get(d);
+      const synthCross =
+        triad.quoteMode === "CCY_USD" ? xau / fx : xau * fx;
 
       aligned.push({
         timestamp: tBar,
         datetime: d,
         xauusd: Number(xau.toFixed(2)),
-        eurusd: Number(eur.toFixed(5)),
-        xaueur: Number(synthXe.toFixed(2)),
-        marketXaueur: mktXe !== undefined ? Number(mktXe.toFixed(2)) : undefined,
-        usdeur: Number((1.0 / eur).toFixed(5)),
+        eurusd: Number(fx.toFixed(triad.yDecimals + 1)),
+        xaueur: Number(synthCross.toFixed(triad.xDecimals)),
+        marketXaueur:
+          mktCross !== undefined
+            ? Number(mktCross.toFixed(triad.xDecimals))
+            : undefined,
+        usdeur: Number((1.0 / fx).toFixed(6)),
         source: "yahoo",
       });
     }
   } else {
     const commonTs = Array.from(gcBars.keys())
-      .filter((t) => euBars.has(t))
+      .filter((t) => fxBars.has(t))
       .sort((a, b) => a - b);
 
     for (const t of commonTs) {
       const xau = gcBars.get(t)!;
-      const eur = euBars.get(t)!;
-      const mktXe = xauEurBars.get(t);
-      const synthXe = xau / eur;
+      const fx = fxBars.get(t)!;
+      const mktCross = crossGoldBars.get(t);
+      const synthCross =
+        triad.quoteMode === "CCY_USD" ? xau / fx : xau * fx;
 
       aligned.push({
         timestamp: t,
         datetime: formatUtcTimestamp(t, false),
         xauusd: Number(xau.toFixed(2)),
-        eurusd: Number(eur.toFixed(5)),
-        xaueur: Number(synthXe.toFixed(2)),
-        marketXaueur: mktXe !== undefined ? Number(mktXe.toFixed(2)) : undefined,
-        usdeur: Number((1.0 / eur).toFixed(5)),
+        eurusd: Number(fx.toFixed(triad.yDecimals + 1)),
+        xaueur: Number(synthCross.toFixed(triad.xDecimals)),
+        marketXaueur:
+          mktCross !== undefined
+            ? Number(mktCross.toFixed(triad.xDecimals))
+            : undefined,
+        usdeur: Number((1.0 / fx).toFixed(6)),
         source: "yahoo",
       });
     }
@@ -271,12 +305,12 @@ export async function getOrUpdateTimeframe(
     if (cached && cached.data.length > 0) {
       return cached.data;
     }
-    const fallback = generateFallbackTimeframe(tf);
-    DATA_CACHE[tf] = { data: fallback, lastFetch: nowSec };
+    const fallback = generateFallbackTimeframe(tf, pair);
+    DATA_CACHE[cacheKey] = { data: fallback, lastFetch: nowSec };
     return fallback;
   }
 
-  DATA_CACHE[tf] = { data: aligned, lastFetch: nowSec };
+  DATA_CACHE[cacheKey] = { data: aligned, lastFetch: nowSec };
   return aligned;
 }
 

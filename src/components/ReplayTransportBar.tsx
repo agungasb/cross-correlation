@@ -74,75 +74,17 @@ export default function ReplayTransportBar() {
   }, [isReplaying, dataSeries.length, setIsReplaying]);
 
   const totalBars = dataSeries.length;
-  const effectiveIdx = Math.max(1, Math.min(totalBars || 1, replayIndex || totalBars || 1));
+  const effectiveIdx = Math.max(
+    1,
+    Math.min(totalBars || 1, replayIndex || totalBars || 1)
+  );
   const currentBar = dataSeries[effectiveIdx - 1];
 
   return (
-    <footer className="bg-[#111522] border-t border-[#232d42] px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs select-none shrink-0">
-      {/* Transport Controls */}
-      <div className="flex items-center gap-1.5">
-        <button
-          onClick={toggleReplay}
-          className={`px-3 py-1 rounded font-bold text-white shadow-sm transition cursor-pointer ${
-            isReplaying
-              ? "bg-rose-500 hover:bg-rose-600"
-              : "bg-gradient-to-r from-pink-500 to-violet-600 hover:opacity-95"
-          }`}
-        >
-          {isReplaying
-            ? "⏸ Pause Replay"
-            : effectiveIdx >= totalBars && totalBars > 0
-            ? "▶ Start Replay"
-            : "▶ Resume Replay"}
-        </button>
-
-        <button
-          onClick={restartReplay}
-          className="px-2 py-1 rounded bg-[#1a2234] hover:bg-[#253048] text-slate-200 border border-[#28354f] cursor-pointer"
-          title="Restart Replay from Bar 1"
-        >
-          ⏮ Restart
-        </button>
-
-        <button
-          onClick={() => stepReplay(-1)}
-          className="px-2 py-1 rounded bg-[#1a2234] hover:bg-[#253048] text-slate-200 border border-[#28354f] cursor-pointer"
-          title="Step Back 1 Bar (Left Arrow)"
-        >
-          ◀ Step
-        </button>
-
-        <button
-          onClick={() => stepReplay(1)}
-          className="px-2 py-1 rounded bg-[#1a2234] hover:bg-[#253048] text-slate-200 border border-[#28354f] cursor-pointer"
-          title="Step Forward 1 Bar (Right Arrow)"
-        >
-          Step ▶
-        </button>
-
-        <button
-          onClick={jumpToLive}
-          className="px-2 py-1 rounded bg-[#1a2234] hover:bg-[#253048] text-cyan-300 border border-[#28354f] cursor-pointer"
-          title="Jump to Latest Live Bar"
-        >
-          Live ⏭
-        </button>
-
-        <button
-          onClick={toggleReplayLoop}
-          className={`px-2 py-1 rounded font-semibold border transition cursor-pointer ${
-            isReplayLoop
-              ? "bg-emerald-600 text-white border-emerald-400"
-              : "bg-[#1a2234] text-slate-400 border-[#28354f] hover:text-white"
-          }`}
-        >
-          {isReplayLoop ? "Loop: ON 🔁" : "Loop: OFF"}
-        </button>
-      </div>
-
-      {/* Scrubber & Bar Info */}
-      <div className="flex items-center gap-2.5 flex-1 min-w-[220px] max-w-md">
-        <span className="font-mono font-semibold text-pink-400 whitespace-nowrap text-[11px]">
+    <footer className="bg-[#111522] border-t border-[#232d42] px-2.5 py-1.5 flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between text-xs select-none shrink-0">
+      {/* Row 1 on Mobile / Center on Desktop: Scrubber & Bar Info */}
+      <div className="flex items-center gap-2 w-full md:w-auto md:flex-1 md:max-w-md md:order-2">
+        <span className="font-mono font-semibold text-pink-400 whitespace-nowrap text-[10px] sm:text-[11px]">
           {currentBar ? currentBar.datetime : "---- -- --:--"}
         </span>
 
@@ -156,56 +98,130 @@ export default function ReplayTransportBar() {
             floatIdxRef.current = v;
             setReplayIndex(v);
           }}
-          className="flex-1 accent-pink-500 cursor-pointer"
+          className="flex-1 accent-pink-500 cursor-pointer h-1.5"
         />
 
-        <span className="font-mono text-slate-400 whitespace-nowrap text-[11px]">
-          Bar {effectiveIdx}/{totalBars}
+        <span className="font-mono text-slate-400 whitespace-nowrap text-[10px] sm:text-[11px]">
+          {effectiveIdx}/{totalBars}
         </span>
       </div>
 
-      {/* Speed & Trace Mode */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] font-bold uppercase text-pink-400 mr-0.5">
-            Speed:
-          </span>
-          {SPEEDS.map((spd) => (
-            <button
-              key={spd}
-              onClick={() => setReplaySpeed(spd)}
-              className={`px-1.5 py-0.5 rounded text-[11px] font-mono transition cursor-pointer ${
-                replaySpeed === spd
-                  ? "bg-pink-600 text-white font-bold border border-pink-400"
-                  : "bg-[#1a2234] text-slate-400 hover:text-white"
-              }`}
-            >
-              {spd}x
-            </button>
-          ))}
+      {/* Row 2 on Mobile / Left & Right on Desktop: Transport & Speed */}
+      <div className="flex items-center justify-between gap-1.5 w-full md:w-auto md:contents">
+        {/* Transport Controls */}
+        <div className="flex items-center gap-1 md:order-1 overflow-x-auto no-scrollbar">
+          <button
+            onClick={toggleReplay}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold text-white shadow-sm transition cursor-pointer whitespace-nowrap ${
+              isReplaying
+                ? "bg-rose-500 hover:bg-rose-600"
+                : "bg-gradient-to-r from-pink-500 to-violet-600 hover:opacity-95"
+            }`}
+          >
+            {isReplaying ? "⏸ Pause" : "▶ Replay"}
+          </button>
+
+          <button
+            onClick={restartReplay}
+            className="px-1.5 py-1 rounded bg-[#1a2234] hover:bg-[#253048] text-slate-200 border border-[#28354f] text-[11px] cursor-pointer"
+            title="Restart Replay"
+          >
+            ⏮
+          </button>
+
+          <button
+            onClick={() => stepReplay(-1)}
+            className="px-1.5 py-1 rounded bg-[#1a2234] hover:bg-[#253048] text-slate-200 border border-[#28354f] text-[11px] cursor-pointer"
+            title="Step Back 1 Bar"
+          >
+            ◀
+          </button>
+
+          <button
+            onClick={() => stepReplay(1)}
+            className="px-1.5 py-1 rounded bg-[#1a2234] hover:bg-[#253048] text-slate-200 border border-[#28354f] text-[11px] cursor-pointer"
+            title="Step Forward 1 Bar"
+          >
+            ▶
+          </button>
+
+          <button
+            onClick={jumpToLive}
+            className="px-2 py-1 rounded bg-[#1a2234] hover:bg-[#253048] text-cyan-300 border border-[#28354f] text-[11px] font-semibold cursor-pointer whitespace-nowrap"
+            title="Jump to Latest Live Bar"
+          >
+            Live ⏭
+          </button>
+
+          <button
+            onClick={toggleReplayLoop}
+            className={`px-2 py-1 rounded text-[11px] font-semibold border transition cursor-pointer whitespace-nowrap ${
+              isReplayLoop
+                ? "bg-emerald-600 text-white border-emerald-400"
+                : "bg-[#1a2234] text-slate-400 border-[#28354f] hover:text-white"
+            }`}
+          >
+            {isReplayLoop ? "🔁" : "Loop"}
+          </button>
         </div>
 
-        <div className="flex items-center bg-[#090d16] p-0.5 rounded border border-[#232d42]">
-          <button
-            onClick={() => setReplayTraceMode("accumulate")}
-            className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
-              replayTraceMode === "accumulate"
-                ? "bg-sky-600 text-white"
-                : "text-slate-400 hover:text-white"
-            }`}
+        {/* Speed & Trace Mode */}
+        <div className="flex items-center gap-1.5 md:order-3 shrink-0">
+          {/* Mobile Compact Speed Select */}
+          <select
+            value={replaySpeed}
+            onChange={(e) => setReplaySpeed(Number(e.target.value))}
+            className="sm:hidden bg-[#1a2234] border border-pink-500/40 rounded px-1.5 py-1 text-[11px] font-mono font-bold text-pink-300 focus:outline-none"
           >
-            Accumulate
-          </button>
-          <button
-            onClick={() => setReplayTraceMode("window")}
-            className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
-              replayTraceMode === "window"
-                ? "bg-sky-600 text-white"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Sliding Window
-          </button>
+            {SPEEDS.map((spd) => (
+              <option key={spd} value={spd}>
+                {spd}x
+              </option>
+            ))}
+          </select>
+
+          {/* Desktop/Tablet Speed Pills */}
+          <div className="hidden sm:flex items-center gap-1">
+            <span className="text-[10px] font-bold uppercase text-pink-400 mr-0.5">
+              Speed:
+            </span>
+            {SPEEDS.map((spd) => (
+              <button
+                key={spd}
+                onClick={() => setReplaySpeed(spd)}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-mono transition cursor-pointer ${
+                  replaySpeed === spd
+                    ? "bg-pink-600 text-white font-bold border border-pink-400"
+                    : "bg-[#1a2234] text-slate-400 hover:text-white"
+                }`}
+              >
+                {spd}x
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center bg-[#090d16] p-0.5 rounded border border-[#232d42]">
+            <button
+              onClick={() => setReplayTraceMode("accumulate")}
+              className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-medium transition cursor-pointer ${
+                replayTraceMode === "accumulate"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Accum
+            </button>
+            <button
+              onClick={() => setReplayTraceMode("window")}
+              className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-medium transition cursor-pointer ${
+                replayTraceMode === "window"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Window
+            </button>
+          </div>
         </div>
       </div>
     </footer>
