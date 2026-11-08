@@ -34,6 +34,10 @@ export interface PhaseGeometry3DResult {
   curvature: Float64Array;
   levyArea: Float64Array;
   coilScore: Float64Array;
+  /** Causal top-down (X,Y) turning/deflection angle Δθ_i in [0°, 180°] between consecutive volatility-standardized steps (<90° forward continuation vs. >=90° hairpin reversal) */
+  turningAngleDeg: Float64Array;
+  /** Causal rolling percentage (0..100%) of active bars in window where turningAngleDeg >= 90° */
+  hairpinRatioPct: Float64Array;
 }
 
 export interface PhaseRegimeMeta {
@@ -97,6 +101,21 @@ export interface SpatialAttractorBasin {
   latestSigmaDist: number;
 }
 
+export interface PhaseEntropyResult {
+  /** Normalized Bandt-Pompe Ordinal Permutation Entropy (d=3, 6 motifs) in [0, 1] on coupled XAUUSD + FX legs */
+  permutationEntropy: Float64Array;
+  /** Circular Turning-Angle & 8-Sector Deflection Entropy H_Δφ in [0, 1] separating coherent trend/orbit from chop */
+  turningEntropy: Float64Array;
+  /** Causal Next-Bar Markov Regime Transition Entropy H(S_{t+1} | S_t) in [0, 1] */
+  markovRegimeEntropy: Float64Array;
+  /** Composite Phase-Space Disorder Index (0..100%) combining turning & ordinal permutation entropy */
+  compositeEntropyPct: Float64Array;
+  /** Entropy-filtered 3D Compression Coil Score (0..100) that suppresses high-entropy bid-ask chop fake coils */
+  entropyQualityCoilScore: Float64Array;
+}
+
+const maCache = new WeakMap<MarketBar[], Map<string, VectorMAResult>>();
+
 /**
  * Causal 3D Vector Moving Average (SMA or EMA) + Phase Displacement (%) & Rolling Z-Score.
  * Guaranteed zero lookahead bias: index `i` only depends on bars `0..i`.
@@ -108,6 +127,12 @@ export function computeVectorMA(
 ): VectorMAResult {
   const len = series.length;
   const period = Math.max(2, Math.min(500, Math.floor(periodInput || 20)));
+  if (len > 0) {
+    const last = series[len - 1];
+    const cacheKey = `${len}:${period}:${type}:${last.timestamp}:${last.xauusd}`;
+    const existing = maCache.get(series)?.get(cacheKey);
+    if (existing) return existing;
+  }
   const xMA = new Float64Array(len);
   const yMA = new Float64Array(len);
   const displacementPct = new Float64Array(len);
@@ -177,7 +202,16 @@ export function computeVectorMA(
     }
   }
 
-  return { xMA, yMA, displacementPct, displacementZScore };
+  const result: VectorMAResult = { xMA, yMA, displacementPct, displacementZScore };
+  const last = series[len - 1];
+  const cacheKey = `${len}:${period}:${type}:${last.timestamp}:${last.xauusd}`;
+  let subMap = maCache.get(series);
+  if (!subMap) {
+    subMap = new Map();
+    maCache.set(series, subMap);
+  }
+  subMap.set(cacheKey, result);
+  return result;
 }
 
 /**
@@ -402,6 +436,10 @@ export function getTimeUnitConfig(tf: TimeframeId): TimeUnitConfig {
   };
 }
 
+const geoCache = new WeakMap<MarketBar[], Map<string, PhaseGeometry3DResult>>();
+const clusterCache = new WeakMap<MarketBar[], Map<string, PhaseClusterResult>>();
+const entropyCache = new WeakMap<MarketBar[], Map<string, PhaseEntropyResult>>();
+
 /**
  * Pillar #2: Causal 3D Differential Geometry & Spiral Chirality Engine.
  * Computes volatility-standardized phase coordinates (normX, normY),
@@ -418,6 +456,13 @@ export function computePhaseGeometry3D(
   const period = Math.max(3, Math.min(500, Math.floor(periodInput || 20)));
   const levyWin = Math.max(3, Math.min(300, Math.floor(levyWindowInput || period)));
 
+  if (len > 0) {
+    const last = series[len - 1];
+    const cacheKey = `${len}:${period}:${levyWin}:${last.timestamp}:${last.xauusd}`;
+    const existing = geoCache.get(series)?.get(cacheKey);
+    if (existing) return existing;
+  }
+
   const normX = new Float64Array(len);
   const normY = new Float64Array(len);
   const radialDist = new Float64Array(len);
@@ -425,6 +470,8 @@ export function computePhaseGeometry3D(
   const curvature = new Float64Array(len);
   const levyArea = new Float64Array(len);
   const coilScore = new Float64Array(len);
+  const turningAngleDeg = new Float64Array(len);
+  const hairpinRatioPct = new Float64Array(len);
 
   if (len === 0) {
     return {
@@ -435,21 +482,30 @@ export function computePhaseGeometry3D(
       curvature,
       levyArea,
       coilScore,
+      turningAngleDeg,
+      hairpinRatioPct,
     };
   }
 
   const instLevy = new Float64Array(len);
+  const validTurnFlag = new Uint8Array(len);
+  const isHairpinFlag = new Uint8Array(len);
   let sumX = 0,
     sumX2 = 0,
     sumY = 0,
     sumY2 = 0;
   let levySum = 0;
+  let turnCountSum = 0;
+  let hairpinCountSum = 0;
 
   let prevEmaVx = 0;
   let prevEmaVy = 0;
   let emaR = 0;
   let emaV = 0;
   let emaK = 0;
+  let lastActiveDx = 0;
+  let lastActiveDy = 0;
+  let hasPrevActiveChord = false;
 
   for (let i = 0; i < len; i++) {
     const vx = series[i].xaueur;
@@ -472,23 +528,69 @@ export function computePhaseGeometry3D(
     const mx = sumX / n;
     const my = sumY / n;
 
+    let scaleX = Math.abs(mx) * 1e-4 || 1e-6;
+    let scaleY = Math.abs(my) * 1e-4 || 1e-6;
+
     if (n >= 2) {
       const varX = Math.max(0, sumX2 / n - mx * mx);
       const varY = Math.max(0, sumY2 / n - my * my);
       const stdX = Math.sqrt(varX);
       const stdY = Math.sqrt(varY);
-      const fallbackScaleX = Math.abs(mx) * 1e-4 || 1e-6;
-      const fallbackScaleY = Math.abs(my) * 1e-4 || 1e-6;
-      normX[i] = (vx - mx) / (stdX > 1e-9 ? stdX : fallbackScaleX);
-      normY[i] = (vy - my) / (stdY > 1e-9 ? stdY : fallbackScaleY);
+      if (stdX > 1e-9) scaleX = stdX;
+      if (stdY > 1e-9) scaleY = stdY;
+      normX[i] = (vx - mx) / scaleX;
+      normY[i] = (vy - my) / scaleY;
     }
 
-    const rNow = Math.hypot(normX[i], normY[i]);
+    const nxNow = normX[i];
+    const nyNow = normY[i];
+    const rNow = Math.sqrt(nxNow * nxNow + nyNow * nyNow);
     radialDist[i] = rNow;
 
     if (i >= 1) {
-      const dx = normX[i] - normX[i - 1];
-      const dy = normY[i] - normY[i - 1];
+      // Top-Down (X, Y) Turning / Deflection Angle Δθ_i in causal local volatility metric
+      const rawDx = vx - series[i - 1].xaueur;
+      const rawDy = vy - series[i - 1].eurusd;
+      const currStepX = rawDx / scaleX;
+      const currStepY = rawDy / scaleY;
+      const currMag = Math.sqrt(currStepX * currStepX + currStepY * currStepY);
+
+      if (currMag > 1e-6) {
+        if (hasPrevActiveChord) {
+          const prevStepX = lastActiveDx / scaleX;
+          const prevStepY = lastActiveDy / scaleY;
+          const prevMag = Math.sqrt(prevStepX * prevStepX + prevStepY * prevStepY);
+          if (prevMag > 1e-6) {
+            const cosTheta = Math.max(
+              -1,
+              Math.min(
+                1,
+                (prevStepX * currStepX + prevStepY * currStepY) /
+                  (prevMag * currMag)
+              )
+            );
+            const deg = (Math.acos(cosTheta) * 180.0) / Math.PI;
+            turningAngleDeg[i] = deg;
+            validTurnFlag[i] = 1;
+            isHairpinFlag[i] = deg >= 90.0 ? 1 : 0;
+          }
+        }
+        lastActiveDx = rawDx;
+        lastActiveDy = rawDy;
+        hasPrevActiveChord = true;
+      }
+
+      turnCountSum += validTurnFlag[i];
+      hairpinCountSum += isHairpinFlag[i];
+      if (i >= period) {
+        turnCountSum -= validTurnFlag[i - period];
+        hairpinCountSum -= isHairpinFlag[i - period];
+      }
+      hairpinRatioPct[i] =
+        turnCountSum > 0 ? (100.0 * hairpinCountSum) / turnCountSum : 0;
+
+      const dx = nxNow - normX[i - 1];
+      const dy = nyNow - normY[i - 1];
 
       // Causal 3-bar EMA (α = 0.5) on first phase differences
       const emaVx = i === 1 ? dx : 0.5 * dx + 0.5 * prevEmaVx;
@@ -499,13 +601,15 @@ export function computePhaseGeometry3D(
       prevEmaVx = emaVx;
       prevEmaVy = emaVy;
 
-      const vNow = Math.hypot(emaVx, emaVy);
+      const vSq = emaVx * emaVx + emaVy * emaVy;
+      const vNow = Math.sqrt(vSq);
       velocity[i] = vNow;
 
       // Regularized 3D space-time curvature γ(t) = (x̃(t), ỹ(t), t) where ż = 1, z̈ = 0
       const crossZ = emaVx * ay - emaVy * ax;
       const numK = Math.sqrt(ax * ax + ay * ay + crossZ * crossZ);
-      const denK = Math.pow(emaVx * emaVx + emaVy * emaVy + 1.0, 1.5);
+      const vSq1 = vSq + 1.0;
+      const denK = vSq1 * Math.sqrt(vSq1);
       const kNow = numK / denK;
       curvature[i] = kNow;
 
@@ -537,7 +641,7 @@ export function computePhaseGeometry3D(
     }
   }
 
-  return {
+  const result: PhaseGeometry3DResult = {
     normX,
     normY,
     radialDist,
@@ -545,7 +649,18 @@ export function computePhaseGeometry3D(
     curvature,
     levyArea,
     coilScore,
+    turningAngleDeg,
+    hairpinRatioPct,
   };
+  const last = series[len - 1];
+  const cacheKey = `${len}:${period}:${levyWin}:${last.timestamp}:${last.xauusd}`;
+  let map = geoCache.get(series);
+  if (!map) {
+    map = new Map();
+    geoCache.set(series, map);
+  }
+  map.set(cacheKey, result);
+  return result;
 }
 
 /**
@@ -598,6 +713,12 @@ export function computePhaseClusters(
 ): PhaseClusterResult {
   const len = series.length;
   const period = Math.max(5, Math.min(300, Math.floor(periodInput || 20)));
+  if (len > 0) {
+    const last = series[len - 1];
+    const cacheKey = `${len}:${period}:${last.timestamp}:${last.xauusd}`;
+    const existing = clusterCache.get(series)?.get(cacheKey);
+    if (existing) return existing;
+  }
   const geo =
     precomputedGeo ?? computePhaseGeometry3D(series, period, period);
 
@@ -761,13 +882,22 @@ export function computePhaseClusters(
     spatialNodes[bestNodeIdx][1] = 0.92 * spatialNodes[bestNodeIdx][1] + 0.08 * ny;
   }
 
-  return {
+  const result: PhaseClusterResult = {
     regime,
     centroidDistance,
     nearestBasinDist,
     transitionMatrix: computeMarkovTransitionMatrix(regime, len),
     regimeCounts,
   };
+  const last = series[len - 1];
+  const cacheKey = `${len}:${period}:${last.timestamp}:${last.xauusd}`;
+  let map = clusterCache.get(series);
+  if (!map) {
+    map = new Map();
+    clusterCache.set(series, map);
+  }
+  map.set(cacheKey, result);
+  return result;
 }
 
 /**
@@ -929,3 +1059,333 @@ export function computeSpatialAttractorBasins(
 
   return rawBasins;
 }
+
+/**
+ * Encodes a 3-bar sequence (a, b, c) into 1 of 3! = 6 Bandt-Pompe ordinal rank motifs (0..5).
+ * Ties are broken deterministically by temporal order (t-2 < t-1 < t).
+ */
+function encodeOrdinalMotif3(a: number, b: number, c: number): number {
+  if (a <= b) {
+    if (b <= c) return 0; // a <= b <= c (monotonic up)
+    return a <= c ? 1 : 2; // 1: a <= c < b (up-peak-pullback), 2: c < a <= b (up-reversal)
+  } else {
+    if (a <= c) return 3; // b < a <= c (dip-breakout)
+    return b <= c ? 4 : 5; // 4: b <= c < a (down-trough-bounce), 5: c < b < a (monotonic down)
+  }
+}
+
+/**
+ * Computes normalized Shannon entropy -Σ p_k ln(p_k) / ln(M) in [0, 1] for a non-negative count array.
+ */
+function normalizedShannonFromCounts(
+  counts: ArrayLike<number>,
+  total: number,
+  logBase: number
+): number {
+  if (total <= 0 || logBase <= 0) return 0;
+  let h = 0;
+  for (let k = 0; k < counts.length; k++) {
+    const c = counts[k];
+    if (c > 0) {
+      const p = c / total;
+      h -= p * Math.log(p);
+    }
+  }
+  return Math.max(0, Math.min(1, h / logBase));
+}
+
+/**
+ * Causal Phase-Space Entropy Engine:
+ *   1. Ordinal Permutation Entropy (H_perm in [0, 1], d=3, 6 motifs) on primary XAUUSD + FX legs
+ *   2. Circular Turning-Angle & 8-Sector Deflection Entropy (H_Δφ in [0, 1]) in standardized (x̃, ỹ) phase space
+ *   3. Next-Bar Markov Regime Transition Entropy (H_Markov in [0, 1]) from causal 4x4 transition probabilities
+ *   4. Composite Phase Disorder Index (0..100%) & Entropy-Quality Coiling Score (0..100)
+ * Guaranteed zero lookahead bias: index `i` only depends on bars `0..i` in O(N) time.
+ */
+export function computePhaseEntropy(
+  series: MarketBar[],
+  periodInput = 20,
+  precomputedGeo?: PhaseGeometry3DResult,
+  precomputedClusters?: PhaseClusterResult
+): PhaseEntropyResult {
+  const len = series.length;
+  const period = Math.max(5, Math.min(300, Math.floor(periodInput || 20)));
+  if (len > 0) {
+    const last = series[len - 1];
+    const cacheKey = `${len}:${period}:${last.timestamp}:${last.xauusd}`;
+    const existing = entropyCache.get(series)?.get(cacheKey);
+    if (existing) return existing;
+  }
+  const geo =
+    precomputedGeo ?? computePhaseGeometry3D(series, period, period);
+  const clusters =
+    precomputedClusters ?? computePhaseClusters(series, period, geo);
+
+  const permutationEntropy = new Float64Array(len);
+  const turningEntropy = new Float64Array(len);
+  const markovRegimeEntropy = new Float64Array(len);
+  const compositeEntropyPct = new Float64Array(len);
+  const entropyQualityCoilScore = new Float64Array(len);
+
+  if (len === 0) {
+    return {
+      permutationEntropy,
+      turningEntropy,
+      markovRegimeEntropy,
+      compositeEntropyPct,
+      entropyQualityCoilScore,
+    };
+  }
+
+  const LN_6 = Math.log(6);
+  const LN_8 = Math.log(8);
+  const LN_4 = Math.log(4);
+
+  // Ring buffers for O(1) sliding-window Bandt-Pompe Ordinal Permutation Entropy (d=3)
+  const motifG = new Uint8Array(len);
+  const motifY = new Uint8Array(len);
+  const validMotif = new Uint8Array(len);
+  const countsG = new Float64Array(6);
+  const countsY = new Float64Array(6);
+  let motifWinCount = 0;
+
+  // Ring buffers for O(1) sliding-window Turning-Angle Circular & 8-Sector Entropy
+  const validTurn = new Uint8Array(len);
+  const turnSector = new Uint8Array(len);
+  const turnCos = new Float64Array(len);
+  const turnSin = new Float64Array(len);
+  const sectorCounts = new Float64Array(8);
+  let turnWinCount = 0;
+  let sumTurnCos = 0;
+  let sumTurnSin = 0;
+
+  let prevChordX = 0;
+  let prevChordY = 0;
+  let hasPrevChord = false;
+
+  // Causal rolling 4x4 Markov transition table with Laplace smoothing (α = 0.15)
+  const markovWin = Math.max(30, period * 2);
+  const transCounts: number[][] = [
+    [0.15, 0.15, 0.15, 0.15],
+    [0.15, 0.15, 0.15, 0.15],
+    [0.15, 0.15, 0.15, 0.15],
+    [0.15, 0.15, 0.15, 0.15],
+  ];
+
+  // Causal rolling sums for local volatility scaling of steps
+  let sumX = 0,
+    sumX2 = 0,
+    sumY = 0,
+    sumY2 = 0;
+
+  for (let i = 0; i < len; i++) {
+    const vx = series[i].xaueur;
+    const vy = series[i].eurusd;
+    sumX += vx;
+    sumX2 += vx * vx;
+    sumY += vy;
+    sumY2 += vy * vy;
+
+    if (i >= period) {
+      const ox = series[i - period].xaueur;
+      const oy = series[i - period].eurusd;
+      sumX -= ox;
+      sumX2 -= ox * ox;
+      sumY -= oy;
+      sumY2 -= oy * oy;
+    }
+
+    const n = Math.min(i + 1, period);
+    const mx = sumX / n;
+    const my = sumY / n;
+    let scaleX = Math.abs(mx) * 1e-4 || 1e-6;
+    let scaleY = Math.abs(my) * 1e-4 || 1e-6;
+    if (n >= 2) {
+      const stdX = Math.sqrt(Math.max(0, sumX2 / n - mx * mx));
+      const stdY = Math.sqrt(Math.max(0, sumY2 / n - my * my));
+      if (stdX > 1e-9) scaleX = stdX;
+      if (stdY > 1e-9) scaleY = stdY;
+    }
+
+    // 1. Bandt-Pompe Ordinal Permutation Entropy (d=3) on primary XAUUSD & FX legs
+    if (i >= 2) {
+      const mG = encodeOrdinalMotif3(
+        series[i - 2].xauusd,
+        series[i - 1].xauusd,
+        series[i].xauusd
+      );
+      const mY = encodeOrdinalMotif3(
+        series[i - 2].eurusd,
+        series[i - 1].eurusd,
+        series[i].eurusd
+      );
+      motifG[i] = mG;
+      motifY[i] = mY;
+      validMotif[i] = 1;
+      countsG[mG] += 1;
+      countsY[mY] += 1;
+      motifWinCount += 1;
+    }
+
+    if (i >= period) {
+      const oldIdx = i - period;
+      if (validMotif[oldIdx]) {
+        countsG[motifG[oldIdx]] -= 1;
+        countsY[motifY[oldIdx]] -= 1;
+        motifWinCount -= 1;
+      }
+    }
+
+    const hPermG =
+      motifWinCount >= 3
+        ? normalizedShannonFromCounts(countsG, motifWinCount, LN_6)
+        : 0.5;
+    const hPermY =
+      motifWinCount >= 3
+        ? normalizedShannonFromCounts(countsY, motifWinCount, LN_6)
+        : 0.5;
+    const hPerm = 0.5 * (hPermG + hPermY);
+    permutationEntropy[i] = hPerm;
+
+    // 2. Signed 2D Phase Deflection / Turning-Angle Entropy H_Δφ
+    if (i >= 1) {
+      const stepX = (vx - series[i - 1].xaueur) / scaleX;
+      const stepY = (vy - series[i - 1].eurusd) / scaleY;
+      const stepMag = Math.sqrt(stepX * stepX + stepY * stepY);
+
+      if (stepMag > 1e-6) {
+        if (hasPrevChord) {
+          const prevMag = Math.sqrt(prevChordX * prevChordX + prevChordY * prevChordY);
+          if (prevMag > 1e-6) {
+            const dot =
+              (prevChordX * stepX + prevChordY * stepY) / (prevMag * stepMag);
+            const cross =
+              (prevChordX * stepY - prevChordY * stepX) / (prevMag * stepMag);
+            const cVal = Math.max(-1, Math.min(1, dot));
+            const sVal = Math.max(-1, Math.min(1, cross));
+            const dPhi = Math.atan2(sVal, cVal); // in (-π, π]
+
+            // Map (-π, π] to 8 sectors (0..7), centered so [-π/8, +π/8] is sector 0
+            const shifted = (dPhi + Math.PI + Math.PI / 8) % (2 * Math.PI);
+            const sec = Math.min(
+              7,
+              Math.max(0, Math.floor((shifted / (2 * Math.PI)) * 8))
+            );
+
+            validTurn[i] = 1;
+            turnSector[i] = sec;
+            turnCos[i] = cVal;
+            turnSin[i] = sVal;
+
+            sectorCounts[sec] += 1;
+            sumTurnCos += cVal;
+            sumTurnSin += sVal;
+            turnWinCount += 1;
+          }
+        }
+        prevChordX = stepX;
+        prevChordY = stepY;
+        hasPrevChord = true;
+      }
+    }
+
+    if (i >= period) {
+      const oldIdx = i - period;
+      if (validTurn[oldIdx]) {
+        sectorCounts[turnSector[oldIdx]] -= 1;
+        sumTurnCos -= turnCos[oldIdx];
+        sumTurnSin -= turnSin[oldIdx];
+        turnWinCount -= 1;
+      }
+    }
+
+    let hTurn = 0.5;
+    if (turnWinCount >= 3) {
+      const hSector = normalizedShannonFromCounts(
+        sectorCounts,
+        turnWinCount,
+        LN_8
+      );
+      const meanC = sumTurnCos / turnWinCount;
+      const meanS = sumTurnSin / turnWinCount;
+      const rBar = Math.min(1, Math.sqrt(meanC * meanC + meanS * meanS));
+      const hairpinFrac = Math.min(1, Math.max(0, geo.hairpinRatioPct[i] / 100));
+
+      // Forward/orbital coherence requires both high resultant concentration R̄ and non-hairpin forward alignment (meanC > 0)
+      const circularDispersion =
+        meanC > 0
+          ? Math.max(1 - rBar * rBar, hairpinFrac)
+          : Math.max(0.85, hairpinFrac);
+
+      hTurn = Math.max(
+        0,
+        Math.min(1, 0.55 * hSector + 0.45 * circularDispersion)
+      );
+    }
+    turningEntropy[i] = hTurn;
+
+    // 3. Causal Next-Bar Markov Regime Transition Entropy H(S_{t+1} | S_t)
+    if (i >= 1) {
+      const prevReg = clusters.regime[i - 1] & 3;
+      const currReg = clusters.regime[i] & 3;
+      transCounts[prevReg][currReg] += 1.0;
+
+      if (i > markovWin) {
+        const oldPrev = clusters.regime[i - markovWin - 1] & 3;
+        const oldCurr = clusters.regime[i - markovWin] & 3;
+        transCounts[oldPrev][oldCurr] = Math.max(
+          0.15,
+          transCounts[oldPrev][oldCurr] - 1.0
+        );
+      }
+    }
+
+    const activeRegime = clusters.regime[i] & 3;
+    const activeRow = transCounts[activeRegime];
+    const rowTotal =
+      activeRow[0] + activeRow[1] + activeRow[2] + activeRow[3];
+    markovRegimeEntropy[i] = normalizedShannonFromCounts(
+      activeRow,
+      rowTotal,
+      LN_4
+    );
+
+    // 4. Composite Phase Disorder Index (0..100%) & Entropy-Quality Coil Score (0..100)
+    const compPct = Math.max(
+      0,
+      Math.min(100, (0.55 * hTurn + 0.45 * hPerm) * 100.0)
+    );
+    compositeEntropyPct[i] = compPct;
+
+    // Penalize high-entropy bid-ask chop masquerading as a compression coil
+    const orderQuality = Math.max(
+      0.15,
+      Math.min(1.25, 1.35 - 1.15 * (compPct / 100.0))
+    );
+    entropyQualityCoilScore[i] = Math.max(
+      0,
+      Math.min(100, geo.coilScore[i] * orderQuality)
+    );
+  }
+
+  const result: PhaseEntropyResult = {
+    permutationEntropy,
+    turningEntropy,
+    markovRegimeEntropy,
+    compositeEntropyPct,
+    entropyQualityCoilScore,
+  };
+  const last = series[len - 1];
+  const cacheKey = `${len}:${period}:${last.timestamp}:${last.xauusd}`;
+  let map = entropyCache.get(series);
+  if (!map) {
+    map = new Map();
+    entropyCache.set(series, map);
+  }
+  map.set(cacheKey, result);
+  return result;
+}
+
+export * from "./crossProxy";
+export * from "./strategy";
+

@@ -120,6 +120,9 @@ Using causal 3-bar EMA-smoothed first differences $(\dot{\tilde{x}}_t, \dot{\til
    $$L_{z,t} = \frac{1}{2} \sum_{k=t-W+1}^{t} \left(\tilde{x}_{k-1}\Delta\tilde{y}_k - \tilde{y}_{k-1}\Delta\tilde{x}_k\right)$$
 4. **Compression Coil Score ($C_{\text{coil}, t} \in [0, 100]$):**
    $$C_{\text{coil}, t} = 100 \cdot \exp(-0.35\,\bar{r}_t) \cdot \exp(-0.45\,\bar{v}_t) \cdot \tanh\!\left(\frac{2.4\,\bar{\kappa}_t}{\bar{v}_t + 0.12}\right)$$
+5. **Top-Down 2D Turning / Deflection Angle ($\Delta \theta_t \in [0^\circ, 180^\circ]$) & Hairpin Ratio (%):**
+   Using consecutive volatility-standardized chords $\Delta \vec{u}_{t-1} = (\Delta X_{t-1}/\sigma_{X,t},\ \Delta Y_{t-1}/\sigma_{Y,t})$ and $\Delta \vec{u}_t = (\Delta X_t/\sigma_{X,t},\ \Delta Y_t/\sigma_{Y,t})$ in the top-down $(X,Y)$ plane:
+   $$\Delta \theta_t = \arccos\!\left(\text{clamp}\!\left(\frac{\Delta \vec{u}_{t-1} \cdot \Delta \vec{u}_t}{\|\Delta \vec{u}_{t-1}\|\,\|\Delta \vec{u}_t\|},\ -1,\ +1\right)\right) \times \frac{180^\circ}{\pi}$$
 
 #### How to Interpret the States
 
@@ -131,6 +134,8 @@ Using causal 3-bar EMA-smoothed first differences $(\dot{\tilde{x}}_t, \dot{\til
 | **Compression Coil Score** | **`45 – 100`** *(Cyan 3D Halos Appear)* | **Active 3D Spring Winding.** Trajectory is tightly bound near the MA spine ($r_t$ small, $v_t$ low) but turning rapidly ($\kappa_t / v_t$ high). Precedes major directional breakouts. |
 | **Velocity ($v_t$) & Curvature ($\kappa_t$)** | **$v_t > 0.8\sigma/\text{b}$ & $\kappa_t < 0.15$** | **Ballistic Momentum.** Fast, straight-line trend expansion with minimal resistance. |
 | **Velocity ($v_t$) & Curvature ($\kappa_t$)** | **High $v_t$ + Sudden $\kappa_t > 0.40$ Spike** | **Phase-Space Inflection / V-Reversal.** A fast move just bent sharply—indicating institutional absorption or stop-run exhaustion. |
+| **Top-Down Turn Angle ($\Delta \theta_t$)** | **$\Delta \theta_t < 90^\circ$ & Hairpin Ratio $\le 25\%$** | **Acute Forward Continuation / Laminar Flow.** Consecutive top-down $(X,Y)$ steps maintain positive directional alignment ($\Delta \vec{u}_{t-1} \cdot \Delta \vec{u}_t > 0$). |
+| **Top-Down Turn Angle ($\Delta \theta_t$)** | **$\Delta \theta_t \ge 90^\circ$ & Hairpin Ratio $\ge 50\%$** | **Obtuse Hairpin Pivot / Whipsaw Chop.** Consecutive steps fold back at $\ge 90^\circ$ (Rose diamonds in 3D and dots on the 2D Geometry curve), signaling either an exhaustion V-reversal at outer rails or mean-reverting chop near the spine. |
 
 ---
 
@@ -235,6 +240,22 @@ Use the following five multi-indicator combinations to filter noise and isolate 
   1. **Regime Cluster:** `C1: Equilibrium Orbit` (Emerald) with high Markov self-persistence (`P(→ Orbit) > 65%`).
   2. **Strong Negative Lévy Area (`Lz < -1.0`, CW Orbit — FX Leads):** Watch the FX leg (`EURUSD` or `USDJPY`) for a local turn at the $\pm 2\sigma$ Bollinger rail. Because FX leads Gold in a CW orbit, an FX inflection point gives a **1–4 bar leading entry signal** for the subsequent Cross-Gold / `XAUUSD` turn.
   3. **Strong Positive Lévy Area (`Lz > +1.0`, CCW Orbit — Cross-Gold Leads):** Cross-Gold turns first; use `XAUEUR`/`XAUJPY` inflection at the Bollinger rail as the leading signal.
+
+---
+
+### 3.6 Causal 5-Setup BUY / SELL Strategy & Backtest Engine (`src/lib/quant/strategy.ts`)
+
+To translate the five playbook setups into deterministic, zero-lookahead **BUY (`+1`)** and **SELL (`-1`)** execution signals across all 6 G10 Triads, `computeWhitepaperStrategy` resolves the radial symmetry of raw 3D distance/velocity metrics via **Orthogonal Iso-XAUUSD Driver Decomposition**:
+
+1. **Signed 3D Spine Implied `XAUUSD` & Deviation ($Z_{\text{XAU}, t}$):**
+   $$G_{\text{spine}, t} = \begin{cases} \text{MA}_{X,t} \cdot \text{MA}_{Y,t} & (\text{CCY\_USD}) \\ \text{MA}_{X,t} / \text{MA}_{Y,t} & (\text{USD\_CCY}) \end{cases}, \qquad Z_{\text{XAU}, t} = \frac{G_t - G_{\text{spine}, t}}{\sigma_{G, t}}$$
+2. **Orthogonal vs. Tangential Iso-Contour Velocity ($v_{\perp, t}, v_{\parallel, t}$) & Cut Efficiency ($\eta_{\perp, t}$):**
+   With $s_{\text{quote}} = +1$ for `CCY_USD` and $-1$ for `USD_CCY`:
+   $$v_{\perp, t} = \frac{\dot{\tilde{x}}_t + s_{\text{quote}}\,\dot{\tilde{y}}_t}{\sqrt{2}}, \qquad v_{\parallel, t} = \frac{\dot{\tilde{x}}_t - s_{\text{quote}}\,\dot{\tilde{y}}_t}{\sqrt{2}}, \qquad \eta_{\perp, t} = \frac{|v_{\perp, t}|}{\sqrt{v_{\perp, t}^2 + v_{\parallel, t}^2 + 10^{-12}}}$$
+   * When $\eta_{\perp, t} \ge 0.55$, the trajectory cuts **orthogonally across** `Iso-XAUUSD` contours (genuine bullion repricing $\implies$ unlocks Setups 1 & 4).
+   * When $\eta_{\perp, t} < 0.52$ with $L_{z,t} < -0.30$ (`CW: FX Leads`) and `Basin Distance < 1.65σ`, **Setup 2 Fakeout Filter** flags and blocks passive Dollar-induced spikes, and fades stalled impulses back toward $G_{\text{spine}, t}$.
+3. **Dynamic Volatility Stop-Loss, Spine Target & Causal Equity Curve:**
+   * Every `BUY` and `SELL` signal computes causal volatility-scaled Stop-Loss ($G_{\text{stop}}$) and Take-Profit ($G_{\text{tp}}$ or $G_{\text{spine}, t}$), rendered in the 3D Phase-Space Canvas (`strategy-signals-3d`), the 2D `Buy/Sell Signals` Sub-Pane, and the `Metrics` Inspector Sidebar.
 
 ---
 

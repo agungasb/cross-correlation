@@ -175,16 +175,18 @@ export interface MarketBar {
   xaueur: number; // Represents the active Gold Cross leg X (e.g., XAUEUR or XAUJPY)
   marketXaueur?: number;
   usdeur: number; // Inverse of Y (1 / Y)
-  source: "yahoo" | "pyth" | "binance" | "simulated";
+  source: "yahoo" | "binance" | "simulated";
 }
 
-export type DataFeedMode = "yahoo" | "pyth" | "binance" | "sim";
+export type DataFeedMode = "yahoo" | "binance" | "sim";
 export type CameraPreset = "orbit" | "top" | "side" | "front";
 export type ReplayTraceMode = "accumulate" | "window";
 export type SubPaneMode =
+  | "signals"
   | "displacement"
   | "geometry"
   | "clusters"
+  | "entropy"
   | "correlation"
   | "basis"
   | "hidden";

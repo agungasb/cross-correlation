@@ -12,10 +12,6 @@ import TechnicalGuideModal from "./TechnicalGuideModal";
 import { subscribeAuthState } from "@/lib/firebase/client";
 import { getMarketBarsClient } from "@/lib/client/yahooBrowser";
 import {
-  getMarketBarsPythClient,
-  subscribePythLiveStream,
-} from "@/lib/client/pythBrowser";
-import {
   getMarketBarsBinanceClient,
   subscribeBinanceLiveStream,
 } from "@/lib/client/binanceBrowser";
@@ -115,9 +111,8 @@ export default function MarketAnalyzerWorkstation() {
     []
   );
 
-  // Fetch timeframe & triad pair history for the active provider ("yahoo", "pyth", or "binance")
-  const activeFeedProvider =
-    mode === "pyth" ? "pyth" : mode === "binance" ? "binance" : "yahoo";
+  // Fetch timeframe & triad pair history for the active provider ("yahoo" or "binance")
+  const activeFeedProvider = mode === "binance" ? "binance" : "yahoo";
 
   useEffect(() => {
     let cancelled = false;
@@ -125,9 +120,7 @@ export default function MarketAnalyzerWorkstation() {
       setIsLoading(true);
       try {
         const bars =
-          activeFeedProvider === "pyth"
-            ? await getMarketBarsPythClient(timeframe, triadPair, false)
-            : activeFeedProvider === "binance"
+          activeFeedProvider === "binance"
             ? await getMarketBarsBinanceClient(timeframe, triadPair, false)
             : await getMarketBarsClient(timeframe, triadPair, false);
 
@@ -203,62 +196,6 @@ export default function MarketAnalyzerWorkstation() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [timeframe, triadPair, isLivePlaying, mode]);
-
-  // Pyth Network Real-Time Hermes SSE Stream + Background Benchmarks Sync
-  useEffect(() => {
-    if (!isLivePlaying || mode !== "pyth") return;
-
-    const unsubStream = subscribePythLiveStream(
-      triadPair,
-      timeframe,
-      (liveBar) => {
-        lastSimPriceRef.current = {
-          xauusd: liveBar.xauusd,
-          eurusd: liveBar.eurusd,
-          timestamp: liveBar.timestamp,
-        };
-        appendLiveBar(liveBar);
-      },
-      () => lastSimPriceRef.current.eurusd
-    );
-
-    const refreshPythHistory = async () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      try {
-        const bars = await getMarketBarsPythClient(timeframe, triadPair, true);
-        if (bars.length > 0 && bars[0].source === "pyth") {
-          const state = useAnalyzerStore.getState();
-          if (state.isReplaying) {
-            useAnalyzerStore.setState({ dataSeries: bars });
-          } else {
-            state.setDataSeries(bars);
-          }
-          const latest = bars[bars.length - 1];
-          lastSimPriceRef.current = {
-            xauusd: latest.xauusd,
-            eurusd: latest.eurusd,
-            timestamp: latest.timestamp,
-          };
-        }
-      } catch {
-        // ignore transient poll errors
-      }
-    };
-
-    const id = setInterval(refreshPythHistory, 30000);
-    const onVisibilityChange = () => {
-      if (!document.hidden) {
-        refreshPythHistory();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      unsubStream();
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [timeframe, triadPair, isLivePlaying, mode, appendLiveBar]);
 
   // Binance Vision Public CDN Live Stream + Background Sync
   useEffect(() => {

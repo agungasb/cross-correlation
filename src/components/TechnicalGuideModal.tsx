@@ -414,6 +414,21 @@ export default function TechnicalGuideModal() {
                     • <strong>Curvature κ &gt; 0.38 after High Velocity:</strong> Sharp phase-space hook / V-reversal inflection.
                   </div>
                 </div>
+
+                <div className="md:col-span-2 bg-[#111827] border border-[#1f293d] rounded-lg p-3 space-y-1.5">
+                  <div className="font-bold text-amber-300">
+                    Top-Down Turning / Deflection Angle (Δθ_t: &lt;90° Forward vs. ≥90° Hairpin) &amp; Hairpin Ratio (%)
+                  </div>
+                  <div className="font-mono text-[11px] text-slate-300 bg-[#090d16] px-2 py-1 rounded">
+                    Δθ_t = arccos( (Δu_t-1 · Δu_t) / (||Δu_t-1|| ||Δu_t||) ) ∈ [0°, 180°]
+                  </div>
+                  <div className="text-emerald-300">
+                    • <strong>Δθ_t &lt; 90° (Acute / Forward Continuation) &amp; Hairpin Ratio ≤ 25% (Laminar Flow):</strong> Consecutive top-down (X,Y) steps maintain positive directional alignment—confirming smooth trend continuation or orbital sweep.
+                  </div>
+                  <div className="text-rose-300">
+                    • <strong>Δθ_t ≥ 90° (Obtuse / Hairpin Reversal) &amp; Hairpin Ratio ≥ 50% (Whipsaw Chop):</strong> Consecutive steps fold back against themselves (Rose diamond markers in 3D &amp; 2D), signaling either a violent V-reversal at an extreme or high-frequency bid-ask chop near the spine.
+                  </div>
+                </div>
               </div>
             </section>
           )}
@@ -463,6 +478,24 @@ export default function TechnicalGuideModal() {
                   <p>
                     Constant-USD-Gold hyperbolas on <code className="font-mono">Z=0</code>. Sliding parallel to curves = pure FX translation; cutting perpendicularly across curves = true USD Gold revaluation.
                   </p>
+                </div>
+
+                <div className="md:col-span-2 bg-[#111827] border border-amber-500/30 rounded-lg p-3 space-y-1.5">
+                  <div className="font-bold text-amber-400">
+                    3D Phase-Space Entropy &amp; Signal-to-Noise Filter (phase-entropy-3d &amp; Entropy 2D Pane)
+                  </div>
+                  <div className="font-mono text-[11px] text-slate-300 bg-[#090d16] px-2 py-1 rounded">
+                    H_perm(d=3) = -Σ p_π ln(p_π)/ln(6) | H_Δφ = 0.55·H_sector(Δφ) + 0.45·(1 - R̄_Δφ²) | H_Markov = -Σ P_ij ln(P_ij)/ln(4)
+                  </div>
+                  <p>
+                    Combines <strong>Turning-Angle Circular Entropy (H_Δφ)</strong>, <strong>Bandt–Pompe Ordinal Permutation Entropy (d=3)</strong> on primary <code className="font-mono">XAUUSD</code> &amp; <code className="font-mono">FX</code> legs, and <strong>Markov Regime Transition Entropy</strong> into a 0–100% Composite Disorder Index:
+                  </p>
+                  <div className="text-emerald-300">
+                    • <strong>&lt; 45% (ORDERED FLOW):</strong> Coherent ballistic trend or structured harmonic orbit—high signal-to-noise ratio.
+                  </div>
+                  <div className="text-rose-300">
+                    • <strong>≥ 75% (MAX ENTROPY CHOP / NO-TRADE):</strong> Multi-directional white-noise chop; automatically dampens false-positive <code className="font-mono">coilScore</code> spikes via <code className="font-mono">entropyQualityCoilScore</code>.
+                  </div>
                 </div>
               </div>
             </section>

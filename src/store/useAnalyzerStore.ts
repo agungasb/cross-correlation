@@ -92,7 +92,7 @@ export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
   cameraPreset: "orbit",
   autoRotate: false,
   indicators: createDefaultIndicatorConfigs(),
-  subPaneMode: "displacement",
+  subPaneMode: "signals",
   sidebarOpen: true,
   activeSidebarTab: "indicators",
   guideModalOpen: false,

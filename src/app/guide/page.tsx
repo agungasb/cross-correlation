@@ -433,6 +433,26 @@ export default function TechnicalGuidePage() {
                     </li>
                   </ul>
                 </div>
+
+                <div className="md:col-span-2 bg-[#090d16] border border-[#1e293b] rounded-lg p-3.5 space-y-1.5">
+                  <div className="text-xs font-bold text-amber-300">
+                    C. Top-Down Turning / Deflection Angle (Δθ_t: &lt;90° Forward vs. ≥90° Hairpin) &amp; Hairpin Ratio (%)
+                  </div>
+                  <div className="font-mono text-[11px] text-slate-300 bg-[#111827] px-2 py-1 rounded">
+                    Δθ_t = arccos( (Δu_t-1 · Δu_t) / (||Δu_t-1|| ||Δu_t||) ) ∈ [0°, 180°]
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    <strong>Question Answered:</strong> <em>&ldquo;When viewed from the top down (XY plane), is the trajectory flowing forward smoothly (&lt;90°) or folding back in sharp hairpin reversals (≥90°)?&rdquo;</em>
+                  </p>
+                  <ul className="text-xs space-y-1 pt-1">
+                    <li className="text-emerald-300">
+                      ● <strong>Δθ_t &lt; 90° (Forward Continuation) &amp; Hairpin Ratio ≤ 25% (Laminar Flow):</strong> Consecutive volatility-standardized top-down steps have a positive dot product—confirming smooth directional momentum or clean orbital rotation.
+                    </li>
+                    <li className="text-rose-300">
+                      ● <strong>Δθ_t ≥ 90° (Hairpin Pivot) &amp; Hairpin Ratio ≥ 50% (Whipsaw Chop):</strong> Consecutive steps fold back at an obtuse angle (marked by Rose diamonds in 3D and dots on the 2D Geometry curve), flagging either an exhaustion V-reversal at outer rails or noisy mean-reverting chop.
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           </section>

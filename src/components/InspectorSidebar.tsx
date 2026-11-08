@@ -4,15 +4,22 @@ import React, { useMemo } from "react";
 import { useAnalyzerStore } from "@/store/useAnalyzerStore";
 import { BUILTIN_INDICATOR_PLUGINS } from "@/lib/quant/plugins";
 import {
+  buildSummaryFromSlice,
   calculateCorrelation,
   calculateLogReturnCorrelation,
+  computeCrossProxyConfluence,
   computeMarkovTransitionMatrix,
   computePhaseClusters,
+  computePhaseEntropy,
   computePhaseGeometry3D,
   computeSpatialAttractorBasins,
   computeVectorMA,
+  computeWhitepaperStrategy,
   getTimeUnitConfig,
   PHASE_REGIME_META,
+  STRATEGY_SETUP_META,
+  StrategySetupId,
+  synthesizeCompanionProxySeries,
 } from "@/lib/quant/math";
 import { CameraPreset, PhaseRegimeId, TRIAD_CONFIGS } from "@/types/market";
 import {
@@ -23,6 +30,7 @@ import {
   RotateCcw,
   Sliders,
   Sparkles,
+  Target,
   X,
 } from "lucide-react";
 
@@ -61,6 +69,8 @@ export default function InspectorSidebar() {
   const resetIndicators = useAnalyzerStore((s) => s.resetIndicators);
 
   const replayIndex = useAnalyzerStore((s) => s.replayIndex);
+  const setReplayIndex = useAnalyzerStore((s) => s.setReplayIndex);
+  const setSubPaneMode = useAnalyzerStore((s) => s.setSubPaneMode);
   const replayTraceMode = useAnalyzerStore((s) => s.replayTraceMode);
 
   const maCfg = indicators["vector-ma"];
@@ -68,14 +78,46 @@ export default function InspectorSidebar() {
   const maType = (
     maCfg?.params?.maType === "EMA" ? "EMA" : "SMA"
   ) as "SMA" | "EMA";
+  const stratCfg = indicators["strategy-signals-3d"]?.params;
+  const coilThreshold = Number(stratCfg?.coilThreshold ?? 42);
+  const curvatureHookThreshold = Number(
+    stratCfg?.curvatureHookThreshold ?? 0.34
+  );
+  const minConfidence = Number(stratCfg?.minConfidence ?? 52);
 
   const memoQuant = useMemo(() => {
     if (dataSeries.length === 0) return null;
     const ma = computeVectorMA(dataSeries, maPeriod, maType);
     const geo = computePhaseGeometry3D(dataSeries, maPeriod, maPeriod);
     const clusters = computePhaseClusters(dataSeries, maPeriod, geo);
-    return { ma, geo, clusters };
-  }, [dataSeries, maPeriod, maType]);
+    const entropy = computePhaseEntropy(dataSeries, maPeriod, geo, clusters);
+    const crossProxySeries = synthesizeCompanionProxySeries(
+      dataSeries,
+      triadPair
+    );
+    const strategy = computeWhitepaperStrategy(dataSeries, {
+      pair: triadPair,
+      period: maPeriod,
+      maType,
+      coilThreshold,
+      curvatureHookThreshold,
+      minConfidence,
+      crossProxySeries,
+      precomputedMA: ma,
+      precomputedGeo: geo,
+      precomputedClusters: clusters,
+      precomputedEntropy: entropy,
+    });
+    return { ma, geo, clusters, entropy, strategy, crossProxySeries };
+  }, [
+    dataSeries,
+    maPeriod,
+    maType,
+    triadPair,
+    coilThreshold,
+    curvatureHookThreshold,
+    minConfidence,
+  ]);
 
   if (!sidebarOpen) return null;
 
@@ -124,6 +166,32 @@ export default function InspectorSidebar() {
   const latestCurv = memoQuant?.geo.curvature[latestIdx] ?? 0;
   const latestLevy = memoQuant?.geo.levyArea[latestIdx] ?? 0;
   const latestCoil = memoQuant?.geo.coilScore[latestIdx] ?? 0;
+  const latestTurnAngle = memoQuant?.geo.turningAngleDeg[latestIdx] ?? 0;
+  const latestHairpinPct = memoQuant?.geo.hairpinRatioPct[latestIdx] ?? 0;
+
+  // Phase-Space Entropy readouts
+  const latestPermEnt = memoQuant?.entropy.permutationEntropy[latestIdx] ?? 0;
+  const latestTurnEnt = memoQuant?.entropy.turningEntropy[latestIdx] ?? 0;
+  const latestMarkovEnt = memoQuant?.entropy.markovRegimeEntropy[latestIdx] ?? 0;
+  const latestCompEntPct = memoQuant?.entropy.compositeEntropyPct[latestIdx] ?? 0;
+  const latestQualCoil =
+    memoQuant?.entropy.entropyQualityCoilScore[latestIdx] ?? 0;
+
+  // Slice-wide Signal-to-Noise regime distribution over [startIdx..effectiveEnd)
+  let orderedBarCount = 0;
+  let chopBarCount = 0;
+  const sliceCount = Math.max(1, effectiveEnd - startIdx);
+  if (memoQuant?.entropy) {
+    const compArr = memoQuant.entropy.compositeEntropyPct;
+    for (let i = startIdx; i < effectiveEnd; i++) {
+      const v = compArr[i];
+      if (v < 45) orderedBarCount++;
+      else if (v >= 75) chopBarCount++;
+    }
+  }
+  const orderedSharePct = (orderedBarCount / sliceCount) * 100;
+  const chopSharePct = (chopBarCount / sliceCount) * 100;
+  const transSharePct = Math.max(0, 100 - orderedSharePct - chopSharePct);
 
   const latestRegimeId = ((memoQuant?.clusters.regime[latestIdx] ?? 0) &
     3) as PhaseRegimeId;
@@ -147,6 +215,64 @@ export default function InspectorSidebar() {
       : [];
   const activeBasin =
     spatialBasins.find((b) => b.isCurrentBasin) ?? spatialBasins[0] ?? null;
+
+  // Strategy Engine readouts at effectiveEnd
+  const stratData = memoQuant?.strategy ?? null;
+  const activePos = stratData?.position[latestIdx] ?? 0;
+  const activeSetupId = ((stratData?.activeSetupId[latestIdx] || 1) as StrategySetupId);
+  const activeSetupMeta = STRATEGY_SETUP_META[activeSetupId];
+  const latestConfidence = stratData?.confidence[latestIdx] ?? 0;
+  const latestCutEff = stratData?.isoCutEfficiency[latestIdx] ?? 0.5;
+  const latestSpineXau = stratData?.spineXauusd[latestIdx] ?? 0;
+  const latestStop = stratData?.stopLossSeries[latestIdx] ?? Number.NaN;
+  const latestTp = stratData?.takeProfitSeries[latestIdx] ?? Number.NaN;
+
+  const stratSummary = stratData
+    ? buildSummaryFromSlice(
+        stratData.events,
+        stratData.trades,
+        stratData.equityCurvePct,
+        stratData.drawdownPct,
+        effectiveEnd
+      )
+    : null;
+
+  const visibleSignalEvents = stratData
+    ? stratData.events.filter((e) => e.barIndex < effectiveEnd)
+    : [];
+  const latestEntryOrFilterEvt =
+    visibleSignalEvents.findLast(
+      (e) => e.action === "BUY" || e.action === "SELL" || e.action === "FILTERED"
+    ) ?? null;
+  const recentSignals = visibleSignalEvents
+    .filter((e) => e.action === "BUY" || e.action === "SELL" || e.action === "FILTERED")
+    .slice(-5)
+    .reverse();
+
+  const activeCrossProxy =
+    memoQuant && activeTab === "stats"
+      ? effectiveEnd === dataSeries.length
+        ? memoQuant.strategy.crossProxy
+        : computeCrossProxyConfluence(dataSeries, {
+            primaryPair: triadPair,
+            period: maPeriod,
+            maType,
+            crossProxySeries: memoQuant.crossProxySeries,
+            effectiveEnd,
+            precomputedMA: memoQuant.ma,
+            precomputedGeo: memoQuant.geo,
+            precomputedClusters: memoQuant.clusters,
+          })
+      : memoQuant?.strategy.crossProxy ?? null;
+  const latestBreadth = activeCrossProxy?.bullionBreadth[latestIdx] ?? 0;
+  const latestChiralityConsensus =
+    activeCrossProxy?.chiralityConsensus[latestIdx] ?? 0;
+  const latestConsensusSpine =
+    activeCrossProxy?.consensusSpineXauusd[latestIdx] ?? 0;
+  const latestConsensusZ = activeCrossProxy?.consensusSpineZ[latestIdx] ?? 0;
+  const latestBounceBias = activeCrossProxy?.bounceSignalBias[latestIdx] ?? 0;
+  const topBounceZones = activeCrossProxy?.latestBounceZones.slice(0, 4) ?? [];
+  const triadSnapshots = activeCrossProxy?.latestTriadSnapshots ?? [];
 
   return (
     <>
@@ -581,6 +707,484 @@ export default function InspectorSidebar() {
 
         {activeTab === "stats" && (
           <div className="space-y-3">
+            {/* Whitepaper 5-Setup Strategy & Signal Engine Card */}
+            {stratData && stratSummary && (
+              <div className="bg-[#111827] border border-emerald-500/35 rounded-lg p-3 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="font-bold text-emerald-300">
+                      Whitepaper Strategy Signals
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+                      activePos === 1
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        : activePos === -1
+                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                        : "bg-slate-800 text-slate-300 border border-slate-700"
+                    }`}
+                  >
+                    {activePos === 1
+                      ? "▲ BUY / LONG"
+                      : activePos === -1
+                      ? "▼ SELL / SHORT"
+                      : "● FLAT / SCAN"}
+                  </span>
+                </div>
+
+                {/* Active Position / Latest Setup Readout */}
+                <div className="bg-[#090d16] border border-[#1e293b] rounded-md p-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-white">
+                      {activePos !== 0
+                        ? activeSetupMeta.shortName
+                        : latestEntryOrFilterEvt
+                        ? `Last: ${latestEntryOrFilterEvt.shortLabel}`
+                        : "Awaiting Setup Trigger"}
+                    </span>
+                    <span className="font-mono text-[10px] font-bold text-cyan-300">
+                      Conviction: {latestConfidence.toFixed(0)}%
+                    </span>
+                  </div>
+
+                  {activePos !== 0 &&
+                    Number.isFinite(latestStop) &&
+                    Number.isFinite(latestTp) && (
+                      <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] font-mono">
+                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
+                          <div className="text-slate-400">Stop (SL)</div>
+                          <div className="text-rose-400 font-bold">
+                            ${latestStop.toFixed(1)}
+                          </div>
+                        </div>
+                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
+                          <div className="text-slate-400">Target (TP)</div>
+                          <div className="text-emerald-400 font-bold">
+                            ${latestTp.toFixed(1)}
+                          </div>
+                        </div>
+                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
+                          <div className="text-slate-400">3D Spine</div>
+                          <div className="text-cyan-300 font-bold">
+                            ${latestSpineXau.toFixed(1)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  {latestEntryOrFilterEvt && (
+                    <p className="text-[10px] text-slate-300 leading-relaxed pt-1 border-t border-white/[0.05]">
+                      {latestEntryOrFilterEvt.rationale}
+                    </p>
+                  )}
+                </div>
+
+                {/* Iso-Contour Orthogonal Efficiency */}
+                <div className="flex justify-between py-0.5 border-b border-white/[0.04]">
+                  <span className="text-slate-400">
+                    Iso-XAUUSD Cut Efficiency:
+                  </span>
+                  <span
+                    className={`font-mono font-semibold ${
+                      latestCutEff >= 0.55
+                        ? "text-emerald-400"
+                        : "text-sky-400"
+                    }`}
+                  >
+                    {(latestCutEff * 100).toFixed(0)}% (
+                    {latestCutEff >= 0.55 ? "Orthogonal Cut" : "FX Slide"})
+                  </span>
+                </div>
+
+                {/* Causal Backtest Performance Grid */}
+                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Signals (B/S):</span>
+                    <span className="font-mono font-bold text-white">
+                      {stratSummary.buyCount}B / {stratSummary.sellCount}S
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Win Rate:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {stratSummary.winRatePct.toFixed(0)}% ({stratSummary.winningTrades}/{stratSummary.totalTrades})
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Profit Factor:</span>
+                    <span className="font-mono font-bold text-amber-300">
+                      {stratSummary.profitFactor.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Net PnL ($/oz):</span>
+                    <span
+                      className={`font-mono font-bold ${
+                        stratSummary.totalNetPnlUsd >= 0
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                      }`}
+                    >
+                      {stratSummary.totalNetPnlUsd >= 0 ? "+" : ""}$
+                      {stratSummary.totalNetPnlUsd.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Sharpe / MaxDD:</span>
+                    <span className="font-mono font-bold text-cyan-300">
+                      {stratSummary.sharpeRatio.toFixed(2)} / -{stratSummary.maxDrawdownPct.toFixed(2)}%
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400" title="Setup 2 Fake Dollar-Induced Spikes Blocked">
+                      S2 Blocked:
+                    </span>
+                    <span className="font-mono font-bold text-sky-400">
+                      {stratSummary.blockedFakeouts} spikes
+                    </span>
+                  </div>
+                </div>
+
+                {/* Recent Signal Log (Click to Scrub 3D/2D Replay) */}
+                {recentSignals.length > 0 && (
+                  <div className="space-y-1 pt-1 border-t border-white/[0.06]">
+                    <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      <span>Recent Signals (Click to Inspect Bar)</span>
+                      <button
+                        onClick={() => {
+                          setSubPaneMode("signals");
+                          if (
+                            typeof window !== "undefined" &&
+                            window.innerWidth < 768
+                          ) {
+                            setSidebarOpen(false);
+                          }
+                        }}
+                        className="text-emerald-400 hover:underline cursor-pointer"
+                      >
+                        2D Equity Chart →
+                      </button>
+                    </div>
+                    <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                      {recentSignals.map((evt) => (
+                        <button
+                          key={`${evt.barIndex}_${evt.action}`}
+                          onClick={() => {
+                            setReplayIndex(evt.barIndex + 1);
+                            setSubPaneMode("signals");
+                            if (
+                              typeof window !== "undefined" &&
+                              window.innerWidth < 768
+                            ) {
+                              setSidebarOpen(false);
+                            }
+                          }}
+                          className="w-full text-left bg-[#090d16] hover:bg-[#162033] px-2 py-1 rounded border border-white/[0.05] flex items-center justify-between gap-1.5 transition cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold shrink-0 ${
+                                evt.action === "BUY"
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : evt.action === "SELL"
+                                  ? "bg-rose-500/20 text-rose-300"
+                                  : "bg-sky-500/20 text-sky-300"
+                              }`}
+                            >
+                              {evt.action === "BUY"
+                                ? "▲ BUY"
+                                : evt.action === "SELL"
+                                ? "▼ SELL"
+                                : "✕ S2"}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-200 truncate">
+                              S{evt.setupId}: {STRATEGY_SETUP_META[evt.setupId].shortName.replace(/^S\d:\s*/, "")}
+                            </span>
+                          </div>
+                          <div className="text-right font-mono text-[10px] shrink-0">
+                            <span className="text-white font-bold">
+                              ${evt.priceXauusd.toFixed(1)}
+                            </span>
+                            <span className="text-slate-400 ml-1">
+                              ({evt.confidence}%)
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Cross-Proxy Confluence & Implied XAUUSD Bounce Matrix */}
+            {activeCrossProxy && (
+              <div className="bg-gradient-to-b from-[#0e1a24] to-[#111827] border border-teal-500/35 rounded-lg p-3 space-y-2.5 text-xs shadow-lg">
+                <div className="flex items-center justify-between border-b border-teal-500/20 pb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Compass className="w-3.5 h-3.5 text-teal-400" />
+                    <span className="font-bold text-teal-300">
+                      Cross-Proxy & Bounce Matrix
+                    </span>
+                  </div>
+                  <span className="px-1.5 py-0.5 rounded bg-teal-500/15 border border-teal-500/30 text-[10px] font-mono font-bold text-teal-300">
+                    {activeCrossProxy.proxyCount}G10 Triads
+                  </span>
+                </div>
+
+                {/* 2x2 Multi-Proxy Telemetry Grid */}
+                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05]">
+                    <div className="text-[10px] text-slate-400">
+                      Bullion Breadth
+                    </div>
+                    <div
+                      className={`font-mono font-bold ${
+                        latestBreadth > 0.15
+                          ? "text-emerald-400"
+                          : latestBreadth < -0.15
+                          ? "text-rose-400"
+                          : "text-slate-200"
+                      }`}
+                    >
+                      {latestBreadth >= 0 ? "+" : ""}
+                      {(latestBreadth * 100).toFixed(0)}% (
+                      {latestBreadth > 0.15
+                        ? "BULL"
+                        : latestBreadth < -0.15
+                        ? "BEAR"
+                        : "NEUT"}
+                      )
+                    </div>
+                  </div>
+
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05]">
+                    <div className="text-[10px] text-slate-400">
+                      Chirality Consensus
+                    </div>
+                    <div
+                      className={`font-mono font-bold ${
+                        latestChiralityConsensus > 0.12
+                          ? "text-emerald-400"
+                          : latestChiralityConsensus < -0.12
+                          ? "text-amber-300"
+                          : "text-slate-200"
+                      }`}
+                    >
+                      {latestChiralityConsensus >= 0 ? "+" : ""}
+                      {(latestChiralityConsensus * 100).toFixed(0)}% (
+                      {latestChiralityConsensus > 0.12
+                        ? "Gold-Led"
+                        : latestChiralityConsensus < -0.12
+                        ? "FX-Led"
+                        : "Balanced"}
+                      )
+                    </div>
+                  </div>
+
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05]">
+                    <div className="text-[10px] text-slate-400">
+                      Consensus 3D Spine
+                    </div>
+                    <div className="font-mono font-bold text-cyan-300">
+                      ${latestConsensusSpine.toFixed(1)}{" "}
+                      <span className="text-[10px] text-slate-400">
+                        ({latestConsensusZ >= 0 ? "+" : ""}
+                        {latestConsensusZ.toFixed(2)}σ)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05]">
+                    <div className="text-[10px] text-slate-400">
+                      Rail Bounce Bias
+                    </div>
+                    <div
+                      className={`font-mono font-bold ${
+                        latestBounceBias > 0.2
+                          ? "text-emerald-400"
+                          : latestBounceBias < -0.2
+                          ? "text-rose-400"
+                          : "text-slate-300"
+                      }`}
+                    >
+                      {latestBounceBias >= 0 ? "+" : ""}
+                      {(latestBounceBias * 100).toFixed(0)}% (
+                      {latestBounceBias > 0.2
+                        ? "Sup Bounce"
+                        : latestBounceBias < -0.2
+                        ? "Res Fade"
+                        : "In-Tube"}
+                      )
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ranked High-Probability Implied XAUUSD Bounce Zones */}
+                {topBounceZones.length > 0 && (
+                  <div className="space-y-1.5 pt-1 border-t border-white/[0.06]">
+                    <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      <span>Implied XAUUSD Bounce Zones</span>
+                      <span className="font-mono text-teal-300">
+                        Spot ${latest ? latest.xauusd.toFixed(1) : "--"}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {topBounceZones.map((zone, idx) => {
+                        const isSup = zone.role === "SUPPORT";
+                        const isRes = zone.role === "RESISTANCE";
+                        return (
+                          <div
+                            key={`${zone.role}_${idx}`}
+                            className="bg-[#090d16] p-2 rounded border border-white/[0.06] space-y-1"
+                          >
+                            <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span
+                                  className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold shrink-0 ${
+                                    isSup
+                                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                      : isRes
+                                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                      : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                                  }`}
+                                >
+                                  {isSup ? "SUP" : isRes ? "RES" : "EQ"}
+                                </span>
+                                <span className="font-mono font-bold text-white text-[11px]">
+                                  ${zone.centerPriceXauusd.toFixed(2)}
+                                </span>
+                                <span className="font-mono text-[10px] text-slate-400 truncate">
+                                  ({zone.distanceSigma >= 0 ? "+" : ""}
+                                  {zone.distanceSigma.toFixed(2)}σ)
+                                </span>
+                              </div>
+                              <div className="text-right font-mono text-[10px] shrink-0">
+                                <span className="text-teal-300 font-bold">
+                                  {zone.bounceProbabilityPct}% prob
+                                </span>
+                                <span className="text-slate-500 ml-1">
+                                  ({zone.confluenceScore}pt)
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Bounce Probability Bar */}
+                            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  isSup
+                                    ? "bg-emerald-400"
+                                    : isRes
+                                    ? "bg-rose-400"
+                                    : "bg-sky-400"
+                                }`}
+                                style={{
+                                  width: `${zone.bounceProbabilityPct}%`,
+                                }}
+                              />
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {zone.contributors.slice(0, 3).map((c) => (
+                                <span
+                                  key={c}
+                                  className="px-1 py-0.2 rounded bg-white/[0.04] text-[9px] font-mono text-slate-300"
+                                >
+                                  {c}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6-Triad G10 Cross-Confirmation Matrix */}
+                {triadSnapshots.length > 0 && (
+                  <div className="space-y-1 pt-1 border-t border-white/[0.06]">
+                    <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      <span>6-Triad G10 Cross-Confirmation</span>
+                      <span className="text-[9px] font-mono text-slate-500">
+                        Z(X) · 3D Spine · ±2σ Rail
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {triadSnapshots.map((snap) => {
+                        const regMeta = PHASE_REGIME_META[snap.regimeId];
+                        const agreeTag =
+                          snap.signalAgreement === 1
+                            ? "BULL"
+                            : snap.signalAgreement === -1
+                            ? "BEAR"
+                            : "NEUT";
+                        return (
+                          <div
+                            key={snap.pair}
+                            className={`px-2 py-1 rounded border flex items-center justify-between gap-1 text-[10px] font-mono ${
+                              snap.pair === triadPair
+                                ? "bg-teal-500/10 border-teal-500/35"
+                                : "bg-[#090d16] border-white/[0.04]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-bold text-slate-200 w-11 shrink-0">
+                                {snap.xTicker}
+                              </span>
+                              <span
+                                className={`font-semibold w-11 shrink-0 ${
+                                  snap.crossGoldZ >= 0
+                                    ? "text-emerald-400"
+                                    : "text-rose-400"
+                                }`}
+                              >
+                                {snap.crossGoldZ >= 0 ? "+" : ""}
+                                {snap.crossGoldZ.toFixed(2)}σ
+                              </span>
+                              <span
+                                className="px-1 rounded text-[8px] font-bold shrink-0"
+                                style={{
+                                  backgroundColor: `${regMeta.color}22`,
+                                  color: regMeta.color,
+                                }}
+                              >
+                                C{snap.regimeId}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span
+                                className="text-slate-300"
+                                title={`±2σ Rail: $${snap.lowerRail2SigmaXauusd.toFixed(
+                                  0
+                                )} – $${snap.upperRail2SigmaXauusd.toFixed(0)}`}
+                              >
+                                ${snap.spineXauusd.toFixed(0)}
+                              </span>
+                              <span
+                                className={`px-1 py-0.2 rounded text-[8px] font-extrabold ${
+                                  agreeTag === "BULL"
+                                    ? "bg-emerald-500/20 text-emerald-300"
+                                    : agreeTag === "BEAR"
+                                    ? "bg-rose-500/20 text-rose-300"
+                                    : "bg-slate-700/60 text-slate-300"
+                                }`}
+                              >
+                                {agreeTag}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="bg-[#111827] border border-[#1f293d] rounded-lg p-3 space-y-2 text-xs">
               <div className="flex items-center justify-between border-b border-white/[0.06] pb-1.5">
                 <span className="font-bold text-cyan-400">
@@ -728,6 +1332,51 @@ export default function InspectorSidebar() {
                 </span>
               </div>
 
+              <div className="flex justify-between py-0.5 border-b border-white/[0.04]">
+                <span
+                  className="text-slate-400"
+                  title="Top-down (X,Y) turning/deflection angle between consecutive standardized steps (<90° Forward Continuation vs >=90° Hairpin Reversal)"
+                >
+                  Top-Down Turn (Δθ):
+                </span>
+                <span
+                  className={`font-mono font-semibold ${
+                    latestTurnAngle >= 90
+                      ? "text-rose-400"
+                      : "text-emerald-400"
+                  }`}
+                >
+                  {latestTurnAngle.toFixed(1)}° (
+                  {latestTurnAngle >= 90 ? ">90° Hairpin" : "<90° Forward"})
+                </span>
+              </div>
+
+              <div className="flex justify-between py-0.5 border-b border-white/[0.04]">
+                <span
+                  className="text-slate-400"
+                  title="Percentage of active steps in rolling window with >=90° top-down deflection angle"
+                >
+                  &gt;90° Hairpin Ratio:
+                </span>
+                <span
+                  className={`font-mono font-semibold ${
+                    latestHairpinPct >= 50
+                      ? "text-rose-400"
+                      : latestHairpinPct <= 25
+                      ? "text-emerald-400"
+                      : "text-amber-300"
+                  }`}
+                >
+                  {latestHairpinPct.toFixed(0)}% (
+                  {latestHairpinPct >= 50
+                    ? "Whipsaw Chop"
+                    : latestHairpinPct <= 25
+                    ? "Laminar Flow"
+                    : "Mixed"}
+                  )
+                </span>
+              </div>
+
               <div className="flex justify-between py-0.5">
                 <span className="text-slate-400">Lévy Area (Lz Lead-Lag):</span>
                 <span
@@ -835,6 +1484,154 @@ export default function InspectorSidebar() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Phase-Space Entropy & Signal-to-Noise Filter */}
+            <div className="bg-[#111827] border border-[#1f293d] rounded-lg p-3 space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-1.5">
+                <span className="font-bold text-amber-400">
+                  Phase-Space Entropy (S/N)
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    latestCompEntPct < 45
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : latestCompEntPct >= 75
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  }`}
+                >
+                  {latestCompEntPct < 45
+                    ? "ORDERED FLOW"
+                    : latestCompEntPct >= 75
+                    ? "MAX ENTROPY CHOP"
+                    : "TRANSITIONAL"}
+                </span>
+              </div>
+
+              <div className="flex justify-between py-0.5 border-b border-white/[0.04]">
+                <span
+                  className="text-slate-400"
+                  title="Composite Phase Disorder (55% Turning Entropy + 45% Ordinal Permutation Entropy)"
+                >
+                  Composite Disorder:
+                </span>
+                <span
+                  className={`font-mono font-bold ${
+                    latestCompEntPct < 45
+                      ? "text-emerald-400"
+                      : latestCompEntPct >= 75
+                      ? "text-rose-400"
+                      : "text-amber-300"
+                  }`}
+                >
+                  {latestCompEntPct.toFixed(1)}%
+                </span>
+              </div>
+
+              {/* Visual Disorder Spectrum Gauge (0% Ordered -> 45% -> 75% -> 100% Max Chop) */}
+              <div className="space-y-1 py-0.5 border-b border-white/[0.04]">
+                <div className="relative h-2 w-full rounded-full overflow-hidden bg-[#090d16] border border-white/[0.07] flex">
+                  <div
+                    className="h-full bg-emerald-500/45"
+                    style={{ width: "45%" }}
+                    title="0–45%: Ordered Flow"
+                  />
+                  <div
+                    className="h-full bg-amber-500/45"
+                    style={{ width: "30%" }}
+                    title="45–75%: Transitional"
+                  />
+                  <div
+                    className="h-full bg-rose-500/50"
+                    style={{ width: "25%" }}
+                    title="75–100%: Max Entropy Chop (No-Trade)"
+                  />
+                  <div
+                    className="absolute top-0 bottom-0 w-1 bg-white shadow"
+                    style={{
+                      left: `calc(${Math.max(
+                        1,
+                        Math.min(99, latestCompEntPct)
+                      )}% - 2px)`,
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] font-mono text-slate-400">
+                  <span className="text-emerald-400">
+                    Ordered: {orderedSharePct.toFixed(0)}%
+                  </span>
+                  <span className="text-amber-300">
+                    Trans: {transSharePct.toFixed(0)}%
+                  </span>
+                  <span className="text-rose-400">
+                    Chop: {chopSharePct.toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-between py-0.5 border-b border-white/[0.04]">
+                <span
+                  className="text-slate-400"
+                  title="Circular & 8-Sector Shannon Entropy of signed 2D phase deflections Δφ_t in [0, 1]"
+                >
+                  Turning Entropy (H_Δφ):
+                </span>
+                <span className="font-mono font-semibold text-sky-400">
+                  {latestTurnEnt.toFixed(3)}
+                </span>
+              </div>
+
+              <div className="flex justify-between py-0.5 border-b border-white/[0.04]">
+                <span
+                  className="text-slate-400"
+                  title="Bandt-Pompe Ordinal Permutation Entropy (d=3, 6 rank motifs) on primary XAUUSD & FX legs"
+                >
+                  Permutation Entropy (d=3):
+                </span>
+                <span className="font-mono font-semibold text-purple-300">
+                  {latestPermEnt.toFixed(3)}
+                </span>
+              </div>
+
+              <div className="flex justify-between py-0.5 border-b border-white/[0.04]">
+                <span
+                  className="text-slate-400"
+                  title="Conditional Shannon Entropy H(S_{t+1} | S_t) of the active regime row in the 4x4 Markov matrix"
+                >
+                  Markov Regime Entropy:
+                </span>
+                <span className="font-mono font-semibold text-emerald-400">
+                  {latestMarkovEnt.toFixed(3)} (
+                  {latestMarkovEnt < 0.55
+                    ? "Locked-In"
+                    : latestMarkovEnt > 0.8
+                    ? "Bifurcating"
+                    : "Moderate"}
+                  )
+                </span>
+              </div>
+
+              <div className="flex justify-between py-0.5">
+                <span
+                  className="text-slate-400"
+                  title="Entropy-gated 3D Compression Coil Score that penalizes high-entropy bid-ask chop fake coils"
+                >
+                  Entropy-Quality Coil:
+                </span>
+                <span className="font-mono font-bold text-cyan-300">
+                  {latestQualCoil.toFixed(1)} / 100 (Raw: {latestCoil.toFixed(0)})
+                </span>
+              </div>
+
+              <div className="pt-1 border-t border-white/[0.05] flex justify-end">
+                <button
+                  onClick={() => setSubPaneMode("entropy")}
+                  className="text-[10px] font-semibold text-amber-400 hover:underline cursor-pointer"
+                >
+                  Open 2D Entropy Chart →
+                </button>
+              </div>
             </div>
 
             {/* Mathematical Cross-Rate Note */}

@@ -1,11 +1,19 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { useAnalyzerStore } from "@/store/useAnalyzerStore";
-import { computeVectorMA } from "@/lib/quant/math";
+import {
+  buildSummaryFromSlice,
+  computeVectorMA,
+  computeWhitepaperStrategy,
+  STRATEGY_SETUP_META,
+  StrategySetupId,
+  synthesizeCompanionProxySeries,
+} from "@/lib/quant/math";
 import { TimeframeId, TRIAD_CONFIGS, TriadPairId } from "@/types/market";
 import {
   BookOpen,
+  ChevronRight,
   Cloud,
   Pause,
   Play,
@@ -13,8 +21,8 @@ import {
   Radio,
   Cpu,
   ArrowLeftRight,
-  Zap,
   Flame,
+  Target,
 } from "lucide-react";
 
 interface TopCommandBarProps {
@@ -53,6 +61,9 @@ export default function TopCommandBar({
   const toggleIndicator = useAnalyzerStore((s) => s.toggleIndicator);
   const sidebarOpen = useAnalyzerStore((s) => s.sidebarOpen);
   const setSidebarOpen = useAnalyzerStore((s) => s.setSidebarOpen);
+  const setActiveSidebarTab = useAnalyzerStore((s) => s.setActiveSidebarTab);
+  const subPaneMode = useAnalyzerStore((s) => s.subPaneMode);
+  const setSubPaneMode = useAnalyzerStore((s) => s.setSubPaneMode);
   const setGuideModalOpen = useAnalyzerStore((s) => s.setGuideModalOpen);
   const trailLength = useAnalyzerStore((s) => s.trailLength);
   const setTrailLength = useAnalyzerStore((s) => s.setTrailLength);
@@ -61,10 +72,11 @@ export default function TopCommandBar({
 
   const triad = TRIAD_CONFIGS[triadPair] ?? TRIAD_CONFIGS.EUR;
 
-  const effectiveIdx = Math.max(
-    0,
-    Math.min(dataSeries.length - 1, (replayIndex || dataSeries.length) - 1)
+  const effectiveEnd = Math.max(
+    1,
+    Math.min(dataSeries.length, replayIndex || dataSeries.length)
   );
+  const effectiveIdx = Math.max(0, effectiveEnd - 1);
   const currentBar = dataSeries[effectiveIdx];
 
   const maCfg = indicators["vector-ma"];
@@ -73,18 +85,100 @@ export default function TopCommandBar({
   const maType = (
     maCfg?.params?.maType === "EMA" ? "EMA" : "SMA"
   ) as "SMA" | "EMA";
+  const stratCfg = indicators["strategy-signals-3d"]?.params;
+  const coilThreshold = Number(stratCfg?.coilThreshold ?? 42);
+  const curvatureHookThreshold = Number(
+    stratCfg?.curvatureHookThreshold ?? 0.34
+  );
+  const minConfidence = Number(stratCfg?.minConfidence ?? 52);
+
+  const stratMemo = useMemo(() => {
+    if (dataSeries.length === 0) return null;
+    const ma = computeVectorMA(dataSeries, maPeriod, maType);
+    const crossProxySeries = synthesizeCompanionProxySeries(
+      dataSeries,
+      triadPair
+    );
+    const strat = computeWhitepaperStrategy(dataSeries, {
+      pair: triadPair,
+      period: maPeriod,
+      maType,
+      coilThreshold,
+      curvatureHookThreshold,
+      minConfidence,
+      crossProxySeries,
+      precomputedMA: ma,
+    });
+    return { ma, strat };
+  }, [
+    dataSeries,
+    maPeriod,
+    maType,
+    triadPair,
+    coilThreshold,
+    curvatureHookThreshold,
+    minConfidence,
+  ]);
 
   let phaseDeviation = "OFF";
-  if (showMA && dataSeries.length > 0) {
-    const { displacementPct } = computeVectorMA(dataSeries, maPeriod, maType);
-    const val = displacementPct[effectiveIdx] ?? 0;
+  if (showMA && stratMemo) {
+    const val = stratMemo.ma.displacementPct[effectiveIdx] ?? 0;
     phaseDeviation = `${val.toFixed(2)}%`;
   }
+
+  const stratData = stratMemo?.strat ?? null;
+  const stratSummary = stratData
+    ? buildSummaryFromSlice(
+        stratData.events,
+        stratData.trades,
+        stratData.equityCurvePct,
+        stratData.drawdownPct,
+        effectiveEnd
+      )
+    : null;
+
+  const activePos = stratData?.position[effectiveIdx] ?? 0;
+  const activeSetupId = ((stratData?.activeSetupId[effectiveIdx] ||
+    1) as StrategySetupId);
+  const activeSetupMeta = STRATEGY_SETUP_META[activeSetupId];
+  const activeSetupShort = activeSetupMeta?.shortName ?? "S1";
+  const activeSetupTitle = activeSetupShort.replace(/^S\d:\s*/, "");
+  const activeConfidence = stratData?.confidence[effectiveIdx] ?? 0;
+  const activeStop = stratData?.stopLossSeries[effectiveIdx] ?? Number.NaN;
+  const activeTp = stratData?.takeProfitSeries[effectiveIdx] ?? Number.NaN;
+
+  const breadthVal = stratData?.crossProxy.bullionBreadth[effectiveIdx] ?? 0;
+  const nearestSup =
+    stratData?.crossProxy.nearestSupportXauusd[effectiveIdx] ?? 0;
+  const nearestRes =
+    stratData?.crossProxy.nearestResistanceXauusd[effectiveIdx] ?? 0;
+
+  const latestSignalEvt = stratData
+    ? stratData.events.findLast(
+        (e) =>
+          e.barIndex < effectiveEnd &&
+          (e.action === "BUY" || e.action === "SELL")
+      ) ?? null
+    : null;
+
+  const buyCount = stratSummary?.buyCount ?? 0;
+  const sellCount = stratSummary?.sellCount ?? 0;
+  const winRatePct = stratSummary?.winRatePct ?? 0;
+  const profitFactor = stratSummary?.profitFactor ?? 0;
+
+  const signalText =
+    activePos === 1
+      ? `▲ LONG (${activeSetupShort.slice(0, 2)}) · ${activeConfidence.toFixed(0)}%`
+      : activePos === -1
+      ? `▼ SHORT (${activeSetupShort.slice(0, 2)}) · ${activeConfidence.toFixed(0)}%`
+      : stratSummary
+      ? `${buyCount}B / ${sellCount}S · WR ${winRatePct.toFixed(0)}%`
+      : "SCANNING";
 
   return (
     <header className="bg-[#111827] border-b border-[#1f293d] px-2.5 py-1.5 flex flex-col gap-1.5 lg:flex-row lg:items-center lg:justify-between select-none shrink-0">
       {/* Row 1 (Mobile) / Left Group (Desktop): Brand, Proxy Selector & Action Buttons */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <img
             src="/icon-192.png"
@@ -110,13 +204,6 @@ export default function TopCommandBar({
             >
               SIM FALLBACK
             </span>
-          ) : currentBar?.source === "pyth" ? (
-            <span
-              className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 animate-pulse whitespace-nowrap"
-              title="Pyth Network Institutional Spot Oracle (Hermes + Pyth Pro History)"
-            >
-              PYTH LIVE
-            </span>
           ) : currentBar?.source === "binance" ? (
             <span
               className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse whitespace-nowrap"
@@ -130,8 +217,8 @@ export default function TopCommandBar({
             </span>
           )}
 
-          {/* Cross-Correlation Proxy Selector (Tablet & Desktop >= sm) */}
-          <div className="hidden sm:flex items-center gap-1 bg-[#0b101b] px-2 py-0.5 rounded border border-amber-500/35 shrink-0">
+          {/* Cross-Correlation Proxy Selector (Tablet & Desktop >= md) */}
+          <div className="hidden md:flex items-center gap-1 bg-[#0b101b] px-2 py-0.5 rounded border border-amber-500/35 shrink-0">
             <ArrowLeftRight className="w-3 h-3 text-amber-400 shrink-0" />
             <select
               value={triadPair}
@@ -188,8 +275,8 @@ export default function TopCommandBar({
         </div>
       </div>
 
-      {/* Mobile-Only Dedicated Proxy Triad Selector Bar (< sm) so Row 1 never overlaps */}
-      <div className="flex sm:hidden items-center justify-between bg-[#0b101b] px-2.5 py-1 rounded border border-amber-500/30">
+      {/* Mobile-Only Dedicated Proxy Triad Selector Bar (< md) so Row 1 never overlaps */}
+      <div className="flex md:hidden items-center justify-between bg-[#0b101b] px-2.5 py-1 rounded border border-amber-500/30">
         <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
           <ArrowLeftRight className="w-3 h-3 text-amber-400 shrink-0" />
           <span>Triad Pair:</span>
@@ -216,8 +303,8 @@ export default function TopCommandBar({
       </div>
 
       {/* Row 2 (Mobile 4-Col Strip) / Center Group (Desktop): Live Triad Tickers */}
-      <div className="grid grid-cols-4 gap-1 sm:flex sm:items-center sm:gap-1.5">
-        <div className="bg-white/[0.03] border border-[#1f293d] rounded px-2 py-0.5 sm:px-2.5 sm:py-1 sm:min-w-[92px] flex flex-col">
+      <div className="grid grid-cols-4 gap-1.5 lg:flex lg:items-center lg:gap-1.5">
+        <div className="bg-white/[0.03] border border-[#1f293d] rounded px-2 py-1 lg:px-2.5 lg:py-1 lg:min-w-[92px] flex flex-col">
           <span className="text-[9px] sm:text-[10px] font-semibold uppercase text-amber-400/90 truncate">
             X: {triad.xTicker}
           </span>
@@ -234,7 +321,7 @@ export default function TopCommandBar({
           </span>
         </div>
 
-        <div className="bg-white/[0.03] border border-[#1f293d] rounded px-2 py-0.5 sm:px-2.5 sm:py-1 sm:min-w-[92px] flex flex-col">
+        <div className="bg-white/[0.03] border border-[#1f293d] rounded px-2 py-1 lg:px-2.5 lg:py-1 lg:min-w-[92px] flex flex-col">
           <span className="text-[9px] sm:text-[10px] font-semibold uppercase text-sky-400/90 truncate">
             Y: {triad.yTicker}
           </span>
@@ -243,7 +330,7 @@ export default function TopCommandBar({
           </span>
         </div>
 
-        <div className="bg-white/[0.03] border border-[#1f293d] rounded px-2 py-0.5 sm:px-2.5 sm:py-1 sm:min-w-[92px] flex flex-col">
+        <div className="bg-white/[0.03] border border-[#1f293d] rounded px-2 py-1 lg:px-2.5 lg:py-1 lg:min-w-[92px] flex flex-col">
           <span className="text-[9px] sm:text-[10px] font-semibold uppercase text-slate-400 truncate">
             XAUUSD ($)
           </span>
@@ -254,7 +341,7 @@ export default function TopCommandBar({
 
         <button
           onClick={() => toggleIndicator("vector-ma")}
-          className={`text-left rounded px-2 py-0.5 sm:px-2.5 sm:py-1 sm:min-w-[92px] flex flex-col border transition cursor-pointer ${
+          className={`text-left rounded px-2 py-1 lg:px-2.5 lg:py-1 lg:min-w-[92px] flex flex-col border transition cursor-pointer ${
             showMA
               ? "bg-emerald-500/10 border-emerald-500/30"
               : "bg-white/[0.02] border-[#1f293d] opacity-60"
@@ -268,6 +355,221 @@ export default function TopCommandBar({
             {phaseDeviation}
           </span>
         </button>
+
+        {/* Desktop-Only 5-Setup Signal Card (lg+) */}
+        <button
+          onClick={() => {
+            setSubPaneMode("signals");
+            setSidebarOpen(true);
+            setActiveSidebarTab("stats");
+          }}
+          className={`hidden lg:flex text-left rounded px-2.5 py-1 min-w-[148px] flex-col items-start justify-between border transition cursor-pointer ${
+            activePos === 1
+              ? "bg-emerald-500/15 border-emerald-500/45"
+              : activePos === -1
+              ? "bg-rose-500/15 border-rose-500/45"
+              : "bg-cyan-500/10 border-cyan-500/30"
+          }`}
+          title="Open Whitepaper Strategy BUY/SELL Signals & Backtest Panel"
+        >
+          <span className="text-[10px] font-semibold uppercase text-cyan-300/90 whitespace-nowrap">
+            5-Setup Signal · PF {profitFactor.toFixed(2)}
+          </span>
+          <span
+            className={`text-xs font-bold font-mono whitespace-nowrap ${
+              activePos === 1
+                ? "text-emerald-400"
+                : activePos === -1
+                ? "text-rose-400"
+                : "text-cyan-300"
+            }`}
+          >
+            {signalText}
+          </span>
+        </button>
+      </div>
+
+      {/* Row 2B (Mobile & Tablet < lg): Dedicated Institutional 5-Setup Signal & 6G10 Confluence HUD */}
+      <div
+        className={`lg:hidden rounded-lg border px-2.5 py-1.5 space-y-1.5 shadow-md transition ${
+          activePos === 1
+            ? "bg-gradient-to-r from-emerald-950/60 via-[#0c1824] to-[#0b101b] border-emerald-500/45"
+            : activePos === -1
+            ? "bg-gradient-to-r from-rose-950/60 via-[#1a101d] to-[#0b101b] border-rose-500/45"
+            : "bg-gradient-to-r from-[#0c1926] via-[#0d1522] to-[#0b101b] border-cyan-500/35"
+        }`}
+      >
+        {/* Top Header of Mobile Signal Card: Live Signal Badge + Action Pills */}
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider shrink-0 border ${
+                activePos === 1
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                  : activePos === -1
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                  : "bg-cyan-500/15 text-cyan-300 border-cyan-500/35"
+              }`}
+            >
+              <Target className="w-3 h-3 shrink-0" />
+              {activePos === 1
+                ? `▲ LONG · S${activeSetupId}`
+                : activePos === -1
+                ? `▼ SHORT · S${activeSetupId}`
+                : "5-SETUP SIGNAL"}
+            </span>
+
+            <span className="text-[11px] font-semibold text-slate-200 truncate">
+              {activePos !== 0 ? (
+                <>
+                  {activeSetupTitle}{" "}
+                  <span className="font-mono text-cyan-300">
+                    ({activeConfidence.toFixed(0)}%)
+                  </span>
+                </>
+              ) : latestSignalEvt ? (
+                <>
+                  Last:{" "}
+                  <span
+                    className={
+                      latestSignalEvt.action === "BUY"
+                        ? "text-emerald-400 font-bold"
+                        : "text-rose-400 font-bold"
+                    }
+                  >
+                    {latestSignalEvt.action === "BUY" ? "▲ BUY" : "▼ SELL"} S
+                    {latestSignalEvt.setupId}
+                  </span>{" "}
+                  <span className="font-mono text-slate-300">
+                    @${latestSignalEvt.priceXauusd.toFixed(0)}
+                  </span>
+                </>
+              ) : (
+                "Scanning 6G10 Triads"
+              )}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() =>
+                setSubPaneMode(
+                  subPaneMode === "signals" ? "displacement" : "signals"
+                )
+              }
+              className={`px-2 py-0.5 rounded text-[10px] font-bold border transition cursor-pointer ${
+                subPaneMode === "signals"
+                  ? "bg-emerald-500/25 text-emerald-200 border-emerald-500/45"
+                  : "bg-[#111827] text-slate-300 border-white/10 hover:text-white"
+              }`}
+              title="Toggle 2D Signals & Equity Curve Sub-Pane"
+            >
+              2D Equity
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveSidebarTab("stats");
+                setSidebarOpen(true);
+              }}
+              className="flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-200 border border-cyan-500/40 hover:bg-cyan-500/30 transition cursor-pointer"
+              title="Open Full 5-Setup Signal Playbook & 6-Triad Bounce Matrix"
+            >
+              <span>Matrix</span>
+              <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom 4-Cell Institutional Telemetry Strip (Never Truncates) */}
+        <div className="grid grid-cols-4 gap-1 pt-1 border-t border-white/[0.07] text-[10px] font-mono">
+          <div className="bg-[#090d16]/85 px-1.5 py-0.5 rounded border border-white/[0.04] flex items-center justify-between">
+            <span className="text-[9px] font-sans font-semibold text-slate-400">
+              B/S
+            </span>
+            <span className="font-bold whitespace-nowrap">
+              <span className="text-emerald-400">{buyCount}B</span>
+              <span className="text-slate-500 mx-0.5">/</span>
+              <span className="text-rose-400">{sellCount}S</span>
+            </span>
+          </div>
+
+          <div className="bg-[#090d16]/85 px-1.5 py-0.5 rounded border border-white/[0.04] flex items-center justify-between">
+            <span className="text-[9px] font-sans font-semibold text-slate-400">
+              WR
+            </span>
+            <span className="font-bold text-emerald-300 whitespace-nowrap">
+              {winRatePct.toFixed(0)}%{" "}
+              <span className="text-amber-300/90 text-[9px]">
+                ({profitFactor.toFixed(1)}x)
+              </span>
+            </span>
+          </div>
+
+          <div className="bg-[#090d16]/85 px-1.5 py-0.5 rounded border border-white/[0.04] flex items-center justify-between">
+            <span className="text-[9px] font-sans font-semibold text-slate-400">
+              6G10
+            </span>
+            <span
+              className={`font-bold whitespace-nowrap ${
+                breadthVal > 0.15
+                  ? "text-emerald-400"
+                  : breadthVal < -0.15
+                  ? "text-rose-400"
+                  : "text-teal-300"
+              }`}
+            >
+              {breadthVal >= 0 ? "+" : ""}
+              {(breadthVal * 100).toFixed(0)}%{" "}
+              <span className="text-[8px]">
+                {breadthVal > 0.15
+                  ? "BULL"
+                  : breadthVal < -0.15
+                  ? "BEAR"
+                  : "NEUT"}
+              </span>
+            </span>
+          </div>
+
+          <div className="bg-[#090d16]/85 px-1.5 py-0.5 rounded border border-white/[0.04] flex items-center justify-between">
+            {activePos !== 0 &&
+            Number.isFinite(activeStop) &&
+            Number.isFinite(activeTp) ? (
+              <>
+                <span className="text-[9px] font-sans font-semibold text-slate-400">
+                  SL/TP
+                </span>
+                <span className="font-bold whitespace-nowrap">
+                  <span className="text-rose-400">
+                    {activeStop.toFixed(0)}
+                  </span>
+                  <span className="text-slate-500">/</span>
+                  <span className="text-emerald-400">
+                    {activeTp.toFixed(0)}
+                  </span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-[9px] font-sans font-semibold text-slate-400">
+                  S/R
+                </span>
+                <span
+                  className="font-bold whitespace-nowrap"
+                  title="Nearest Cross-Proxy Implied XAUUSD Support & Resistance Bounce Zones"
+                >
+                  <span className="text-emerald-400">
+                    {nearestSup > 0 ? nearestSup.toFixed(0) : "--"}
+                  </span>
+                  <span className="text-slate-500">/</span>
+                  <span className="text-rose-400">
+                    {nearestRes > 0 ? nearestRes.toFixed(0) : "--"}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Row 3 (Mobile Scroll Strip) / Right Group (Desktop): Timeframe & Feed Controls */}
@@ -305,18 +607,6 @@ export default function TopCommandBar({
           >
             <Radio className="w-3 h-3" />
             <span>Yahoo</span>
-          </button>
-          <button
-            onClick={() => setMode("pyth")}
-            className={`flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded text-[11px] sm:text-xs font-medium transition cursor-pointer ${
-              mode === "pyth"
-                ? "bg-purple-600 text-white"
-                : "text-slate-400 hover:text-white"
-            }`}
-            title="Pyth Network Real-Time Spot Oracle (Spot XAU/USD + FX)"
-          >
-            <Zap className="w-3 h-3" />
-            <span>Pyth</span>
           </button>
           <button
             onClick={() => setMode("binance")}

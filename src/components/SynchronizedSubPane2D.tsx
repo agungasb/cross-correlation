@@ -3,11 +3,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAnalyzerStore } from "@/store/useAnalyzerStore";
 import {
+  buildSummaryFromSlice,
   computePhaseClusters,
+  computePhaseEntropy,
   computePhaseGeometry3D,
   computeRollingStatsSeries,
   computeVectorMA,
+  computeWhitepaperStrategy,
   PHASE_REGIME_META,
+  STRATEGY_SETUP_META,
+  StrategySetupId,
+  synthesizeCompanionProxySeries,
 } from "@/lib/quant/math";
 import { PhaseRegimeId, SubPaneMode, TRIAD_CONFIGS } from "@/types/market";
 import {
@@ -21,6 +27,8 @@ import {
   GripHorizontal,
   Maximize2,
   Minimize2,
+  Sparkles,
+  Target,
 } from "lucide-react";
 
 export default function SynchronizedSubPane2D() {
@@ -54,6 +62,12 @@ export default function SynchronizedSubPane2D() {
   const maType = (
     indicators["vector-ma"]?.params?.maType === "EMA" ? "EMA" : "SMA"
   ) as "SMA" | "EMA";
+  const stratCfg = indicators["strategy-signals-3d"]?.params;
+  const coilThreshold = Number(stratCfg?.coilThreshold ?? 42);
+  const curvatureHookThreshold = Number(
+    stratCfg?.curvatureHookThreshold ?? 0.34
+  );
+  const minConfidence = Number(stratCfg?.minConfidence ?? 52);
 
   const quantData = useMemo(() => {
     if (dataSeries.length === 0) return null;
@@ -65,8 +79,34 @@ export default function SynchronizedSubPane2D() {
     );
     const geo = computePhaseGeometry3D(dataSeries, maPeriod, maPeriod);
     const clusters = computePhaseClusters(dataSeries, maPeriod, geo);
-    return { ma, rolling, geo, clusters };
-  }, [dataSeries, maPeriod, maType, triadPair]);
+    const entropy = computePhaseEntropy(dataSeries, maPeriod, geo, clusters);
+    const crossProxySeries = synthesizeCompanionProxySeries(
+      dataSeries,
+      triadPair
+    );
+    const strategy = computeWhitepaperStrategy(dataSeries, {
+      pair: triadPair,
+      period: maPeriod,
+      maType,
+      coilThreshold,
+      curvatureHookThreshold,
+      minConfidence,
+      crossProxySeries,
+      precomputedMA: ma,
+      precomputedGeo: geo,
+      precomputedClusters: clusters,
+      precomputedEntropy: entropy,
+    });
+    return { ma, rolling, geo, clusters, entropy, strategy };
+  }, [
+    dataSeries,
+    maPeriod,
+    maType,
+    triadPair,
+    coilThreshold,
+    curvatureHookThreshold,
+    minConfidence,
+  ]);
 
   const effectiveEnd = Math.max(
     1,
@@ -469,6 +509,14 @@ export default function SynchronizedSubPane2D() {
         effectiveEnd
       );
       const velSlice = quantData.geo.velocity.subarray(startIdx, effectiveEnd);
+      const angleSlice = quantData.geo.turningAngleDeg.subarray(
+        startIdx,
+        effectiveEnd
+      );
+      const hairpinSlice = quantData.geo.hairpinRatioPct.subarray(
+        startIdx,
+        effectiveEnd
+      );
 
       let maxLevy = 1.5;
       for (let i = 0; i < levySlice.length; i++) {
@@ -526,6 +574,18 @@ export default function SynchronizedSubPane2D() {
       ctx.lineWidth = 1.8;
       ctx.stroke();
 
+      // >90° Top-Down Hairpin Reversal Dots on Coil Curve (Rose)
+      ctx.fillStyle = "#fb7185";
+      for (let i = 0; i < angleSlice.length; i++) {
+        if (angleSlice[i] >= 90.0 && velSlice[i] >= 0.12) {
+          const px = xAt(i);
+          const py = yAtScore(coilSlice[i]);
+          ctx.beginPath();
+          ctx.arc(px, py, 2.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
       // Left Y-axis labels (Signed Lévy Area)
       ctx.fillStyle = "#34d399";
       ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
@@ -546,22 +606,30 @@ export default function SynchronizedSubPane2D() {
       const lastLevy = levySlice[levySlice.length - 1] ?? 0;
       const lastCoil = coilSlice[coilSlice.length - 1] ?? 0;
       const lastVel = velSlice[velSlice.length - 1] ?? 0;
+      const lastAngle = angleSlice[angleSlice.length - 1] ?? 0;
+      const lastHairpin = hairpinSlice[hairpinSlice.length - 1] ?? 0;
 
       ctx.textAlign = "left";
       ctx.fillStyle = lastLevy >= 0 ? "#34d399" : "#38bdf8";
       ctx.fillText(
-        `● Lévy Chirality Lz: ${lastLevy >= 0 ? "+" : ""}${lastLevy.toFixed(
-          2
-        )} (${lastLevy >= 0 ? `CCW ${triad.xTicker} Leads` : `CW ${triad.yTicker} Leads`})`,
+        `● Lz: ${lastLevy >= 0 ? "+" : ""}${lastLevy.toFixed(2)} (${
+          lastLevy >= 0 ? `CCW ${triad.xTicker}` : `CW ${triad.yTicker}`
+        })`,
         padLeft + 4,
         padTop - 7
       );
       ctx.fillStyle = "#22d3ee";
       ctx.fillText(
-        `● Coil Score: ${lastCoil.toFixed(0)}/100 | Vel: ${lastVel.toFixed(
-          2
-        )}σ/b`,
-        padLeft + 275,
+        `● Coil: ${lastCoil.toFixed(0)}/100 | v: ${lastVel.toFixed(2)}σ/b`,
+        padLeft + 185,
+        padTop - 7
+      );
+      ctx.fillStyle = lastAngle >= 90 ? "#fb7185" : "#a7f3d0";
+      ctx.fillText(
+        `● Turn Δθ: ${lastAngle.toFixed(1)}° (${
+          lastAngle >= 90 ? ">90° Hairpin" : "<90° Forward"
+        } | ${lastHairpin.toFixed(0)}% Chop)`,
+        padLeft + 365,
         padTop - 7
       );
     } else if (subPaneMode === "clusters") {
@@ -672,6 +740,513 @@ export default function SynchronizedSubPane2D() {
         padLeft + 255,
         padTop - 7
       );
+    } else if (subPaneMode === "entropy") {
+      const ent = quantData.entropy;
+      const permSlice = ent.permutationEntropy.subarray(startIdx, effectiveEnd);
+      const turnSlice = ent.turningEntropy.subarray(startIdx, effectiveEnd);
+      const markovSlice = ent.markovRegimeEntropy.subarray(
+        startIdx,
+        effectiveEnd
+      );
+      const compSlice = ent.compositeEntropyPct.subarray(
+        startIdx,
+        effectiveEnd
+      );
+      const qualCoilSlice = ent.entropyQualityCoilScore.subarray(
+        startIdx,
+        effectiveEnd
+      );
+
+      const ribbonH = 10;
+      const innerTop = padTop + ribbonH + 4;
+      const innerH = Math.max(20, plotH - ribbonH - 4);
+
+      // Top Disorder Regime Ribbon (<45% Emerald Ordered, 45..75% Amber Transitional, >=75% Rose High-Entropy Chop)
+      const cellW = Math.max(1.5, plotW / Math.max(1, compSlice.length));
+      for (let i = 0; i < compSlice.length; i++) {
+        const cPct = compSlice[i];
+        ctx.fillStyle =
+          cPct < 45
+            ? "rgba(16, 185, 129, 0.85)"
+            : cPct >= 75
+            ? "rgba(244, 63, 94, 0.85)"
+            : "rgba(245, 158, 11, 0.75)";
+        ctx.fillRect(
+          padLeft + (i / Math.max(1, compSlice.length)) * plotW,
+          padTop + 1,
+          cellW + 0.8,
+          ribbonH
+        );
+      }
+
+      const yAtPct = (pct: number) => {
+        const clamped = Math.max(0, Math.min(100, pct));
+        return innerTop + (1 - clamped / 100) * innerH;
+      };
+
+      // 75% High-Entropy Chop / No-Trade Zone & 45% Coherent Order Zone
+      const yChop = yAtPct(75);
+      const yOrder = yAtPct(45);
+      ctx.fillStyle = "rgba(244, 63, 94, 0.07)";
+      ctx.fillRect(padLeft, innerTop, plotW, Math.max(1, yChop - innerTop));
+      ctx.fillStyle = "rgba(16, 185, 129, 0.06)";
+      ctx.fillRect(
+        padLeft,
+        yOrder,
+        plotW,
+        Math.max(1, innerTop + innerH - yOrder)
+      );
+
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = "rgba(244, 63, 94, 0.5)";
+      ctx.beginPath();
+      ctx.moveTo(padLeft, yChop);
+      ctx.lineTo(padLeft + plotW, yChop);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(16, 185, 129, 0.45)";
+      ctx.beginPath();
+      ctx.moveTo(padLeft, yOrder);
+      ctx.lineTo(padLeft + plotW, yOrder);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Shaded Entropy-Quality True Coil Score (Cyan background fill)
+      if (qualCoilSlice.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(xAt(0), innerTop + innerH);
+        for (let i = 0; i < qualCoilSlice.length; i++) {
+          ctx.lineTo(xAt(i), yAtPct(qualCoilSlice[i]));
+        }
+        ctx.lineTo(xAt(qualCoilSlice.length - 1), innerTop + innerH);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(34, 211, 238, 0.14)";
+        ctx.fill();
+      }
+
+      // 1. Markov Regime Transition Entropy H_Markov (Emerald dotted)
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      for (let i = 0; i < markovSlice.length; i++) {
+        const px = xAt(i);
+        const py = yAtPct(markovSlice[i] * 100);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = "rgba(52, 211, 153, 0.7)";
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+
+      // 2. Bandt-Pompe Ordinal Permutation Entropy H_perm d=3 (Purple dashed)
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      for (let i = 0; i < permSlice.length; i++) {
+        const px = xAt(i);
+        const py = yAtPct(permSlice[i] * 100);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = "#a78bfa";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 3. Turning-Angle Circular & Sector Entropy H_Δφ (Sky Blue solid)
+      ctx.beginPath();
+      for (let i = 0; i < turnSlice.length; i++) {
+        const px = xAt(i);
+        const py = yAtPct(turnSlice[i] * 100);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      // 4. Composite Phase Disorder Score (Bold Amber/Rose)
+      ctx.beginPath();
+      for (let i = 0; i < compSlice.length; i++) {
+        const px = xAt(i);
+        const py = yAtPct(compSlice[i]);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = "#f59e0b";
+      ctx.lineWidth = 2.1;
+      ctx.stroke();
+
+      // Highlight Entropy-Verified True Coils (Cyan dots) & Max-Chop Warning spikes (Rose dots)
+      for (let i = 0; i < compSlice.length; i++) {
+        if (qualCoilSlice[i] >= 42 && compSlice[i] < 55) {
+          const px = xAt(i);
+          const py = yAtPct(compSlice[i]);
+          ctx.fillStyle = "#22d3ee";
+          ctx.beginPath();
+          ctx.arc(px, py, 2.4, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (compSlice[i] >= 80) {
+          const px = xAt(i);
+          const py = yAtPct(compSlice[i]);
+          ctx.fillStyle = "#fb7185";
+          ctx.beginPath();
+          ctx.arc(px, py, 2.0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Interactive hover markers on the 4 entropy curves
+      const inspectIdx =
+        hoverIdx !== null && hoverIdx >= 0 && hoverIdx < compSlice.length
+          ? hoverIdx
+          : Math.max(0, compSlice.length - 1);
+
+      if (hoverIdx !== null && hoverIdx >= 0 && hoverIdx < compSlice.length) {
+        const hx = xAt(hoverIdx);
+        const pts: { y: number; color: string }[] = [
+          { y: yAtPct(compSlice[hoverIdx]), color: "#f59e0b" },
+          { y: yAtPct(turnSlice[hoverIdx] * 100), color: "#38bdf8" },
+          { y: yAtPct(permSlice[hoverIdx] * 100), color: "#a78bfa" },
+          { y: yAtPct(markovSlice[hoverIdx] * 100), color: "#34d399" },
+        ];
+        for (const pt of pts) {
+          ctx.fillStyle = pt.color;
+          ctx.beginPath();
+          ctx.arc(hx, pt.y, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#0b101b";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      // Y-Axis Labels
+      ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.fillStyle = "#f59e0b";
+      ctx.textAlign = "right";
+      ctx.fillText(`100%`, padLeft - 6, innerTop + 8);
+      ctx.fillStyle = "#fb7185";
+      ctx.fillText(`75%`, padLeft - 6, yChop + 3);
+      ctx.fillStyle = "#34d399";
+      ctx.fillText(`45%`, padLeft - 6, yOrder + 3);
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText(`0%`, padLeft - 6, innerTop + innerH);
+
+      ctx.fillStyle = "#22d3ee";
+      ctx.textAlign = "left";
+      ctx.fillText(`1.00`, padLeft + plotW + 5, innerTop + 8);
+      ctx.fillText(`0.50`, padLeft + plotW + 5, innerTop + innerH * 0.5 + 3);
+      ctx.fillText(`0.00`, padLeft + plotW + 5, innerTop + innerH);
+
+      const lastComp = compSlice[inspectIdx] ?? 0;
+      const lastTurn = turnSlice[inspectIdx] ?? 0;
+      const lastPerm = permSlice[inspectIdx] ?? 0;
+      const lastMarkov = markovSlice[inspectIdx] ?? 0;
+      const lastQualCoil = qualCoilSlice[inspectIdx] ?? 0;
+
+      const stateLabel =
+        lastComp < 45
+          ? "ORDERED FLOW"
+          : lastComp >= 75
+          ? "MAX ENTROPY CHOP (NO-TRADE)"
+          : "TRANSITIONAL";
+
+      ctx.textAlign = "left";
+      ctx.fillStyle =
+        lastComp < 45 ? "#10b981" : lastComp >= 75 ? "#fb7185" : "#f59e0b";
+      ctx.fillText(
+        `● Disorder: ${lastComp.toFixed(0)}% (${stateLabel})`,
+        padLeft + 4,
+        padTop - 7
+      );
+
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillText(
+        `● Turn H_Δφ: ${lastTurn.toFixed(2)}`,
+        padLeft + 245,
+        padTop - 7
+      );
+
+      ctx.fillStyle = "#a78bfa";
+      ctx.fillText(
+        `● Perm H_3: ${lastPerm.toFixed(2)}`,
+        padLeft + 375,
+        padTop - 7
+      );
+
+      ctx.fillStyle = "#34d399";
+      ctx.fillText(
+        `● Markov H: ${lastMarkov.toFixed(2)} | True Coil: ${lastQualCoil.toFixed(
+          0
+        )}/100`,
+        padLeft + 500,
+        padTop - 7
+      );
+    } else if (subPaneMode === "signals") {
+      const strat = quantData.strategy;
+      const posSlice = strat.position.subarray(startIdx, effectiveEnd);
+      const spineSlice = strat.spineXauusd.subarray(startIdx, effectiveEnd);
+      const eqSlice = strat.equityCurvePct.subarray(startIdx, effectiveEnd);
+      const slSlice = strat.stopLossSeries.subarray(startIdx, effectiveEnd);
+      const tpSlice = strat.takeProfitSeries.subarray(startIdx, effectiveEnd);
+      const filtSlice = strat.fakeoutFiltered.subarray(startIdx, effectiveEnd);
+
+      const ribbonH = 10;
+      const innerTop = padTop + ribbonH + 4;
+      const innerH = Math.max(20, plotH - ribbonH - 4);
+
+      // Top Position State Ribbon (Emerald = LONG, Rose = SHORT, Slate = FLAT, Sky-Blue ticks = Blocked Fakeout)
+      const cellW = Math.max(1.5, plotW / Math.max(1, posSlice.length));
+      for (let i = 0; i < posSlice.length; i++) {
+        const pos = posSlice[i];
+        ctx.fillStyle =
+          pos === 1
+            ? "rgba(16, 185, 129, 0.85)"
+            : pos === -1
+            ? "rgba(244, 63, 94, 0.85)"
+            : "#1e293b";
+        ctx.fillRect(
+          padLeft + (i / Math.max(1, posSlice.length)) * plotW,
+          padTop + 1,
+          cellW + 0.8,
+          ribbonH
+        );
+        if (filtSlice[i] === 1) {
+          ctx.fillStyle = "#38bdf8";
+          ctx.fillRect(
+            padLeft + (i / Math.max(1, posSlice.length)) * plotW,
+            padTop + ribbonH - 3,
+            Math.max(2, cellW),
+            3
+          );
+        }
+      }
+
+      // Compute price bounds for XAUUSD + Spine + Active SL/TP
+      let minP = Infinity;
+      let maxP = -Infinity;
+      for (let i = 0; i < sliceLen; i++) {
+        const g = dataSeries[startIdx + i]?.xauusd ?? 0;
+        const sp = spineSlice[i] || g;
+        if (g < minP) minP = g;
+        if (g > maxP) maxP = g;
+        if (sp < minP) minP = sp;
+        if (sp > maxP) maxP = sp;
+      }
+      const pSpan = Math.max(1.0, maxP - minP);
+      minP -= pSpan * 0.12;
+      maxP += pSpan * 0.12;
+
+      const yAtPrice = (p: number) => {
+        const clamped = Math.max(minP, Math.min(maxP, p));
+        return innerTop + ((maxP - clamped) / (maxP - minP || 1)) * innerH;
+      };
+
+      // Compute equity curve bounds (%)
+      let minEq = -0.15;
+      let maxEq = 0.25;
+      for (let i = 0; i < eqSlice.length; i++) {
+        if (eqSlice[i] < minEq) minEq = eqSlice[i] * 1.15;
+        if (eqSlice[i] > maxEq) maxEq = eqSlice[i] * 1.15;
+      }
+      const eqSpan = Math.max(0.2, maxEq - minEq);
+
+      const yAtEq = (eq: number) => {
+        const clamped = Math.max(minEq, Math.min(maxEq, eq));
+        return innerTop + ((maxEq - clamped) / eqSpan) * innerH;
+      };
+
+      // Shaded Cumulative Strategy Equity Curve (Cyan/Emerald background fill)
+      if (eqSlice.length > 1) {
+        const yEqZero = yAtEq(0);
+        ctx.beginPath();
+        ctx.moveTo(xAt(0), yEqZero);
+        for (let i = 0; i < eqSlice.length; i++) {
+          ctx.lineTo(xAt(i), yAtEq(eqSlice[i]));
+        }
+        ctx.lineTo(xAt(eqSlice.length - 1), yEqZero);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(34, 211, 238, 0.10)";
+        ctx.fill();
+
+        ctx.beginPath();
+        for (let i = 0; i < eqSlice.length; i++) {
+          const px = xAt(i);
+          const py = yAtEq(eqSlice[i]);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.strokeStyle = "rgba(34, 211, 238, 0.55)";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+
+      // 3D MA Spine Implied XAUUSD Equilibrium Curve (Dashed Emerald)
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      for (let i = 0; i < spineSlice.length; i++) {
+        const px = xAt(i);
+        const py = yAtPrice(spineSlice[i]);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = "rgba(52, 211, 153, 0.65)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Primary XAUUSD Spot Price Curve
+      ctx.beginPath();
+      for (let i = 0; i < sliceLen; i++) {
+        const g = dataSeries[startIdx + i]?.xauusd ?? 0;
+        const px = xAt(i);
+        const py = yAtPrice(g);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+
+      // Active Stop-Loss & Take-Profit horizontal guide ticks on latest bar if in position
+      const lastPos = posSlice[posSlice.length - 1] ?? 0;
+      const lastSl = slSlice[slSlice.length - 1];
+      const lastTp = tpSlice[tpSlice.length - 1];
+      if (lastPos !== 0 && Number.isFinite(lastSl) && Number.isFinite(lastTp)) {
+        const ySl = yAtPrice(lastSl);
+        const yTp = yAtPrice(lastTp);
+        const xStartGuide = Math.max(padLeft, padLeft + plotW - 95);
+        ctx.setLineDash([2, 2]);
+        ctx.strokeStyle = "rgba(244, 63, 94, 0.8)";
+        ctx.beginPath();
+        ctx.moveTo(xStartGuide, ySl);
+        ctx.lineTo(padLeft + plotW, ySl);
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(16, 185, 129, 0.8)";
+        ctx.beginPath();
+        ctx.moveTo(xStartGuide, yTp);
+        ctx.lineTo(padLeft + plotW, yTp);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Draw discrete BUY ▲, SELL ▼, and FILTERED ✕ markers
+      for (const evt of strat.events) {
+        if (evt.barIndex < startIdx || evt.barIndex >= effectiveEnd) continue;
+        const localIdx = evt.barIndex - startIdx;
+        const px = xAt(localIdx);
+        const py = yAtPrice(evt.priceXauusd);
+
+        if (evt.action === "BUY") {
+          ctx.fillStyle = "#10b981";
+          ctx.beginPath();
+          ctx.moveTo(px, py - 2);
+          ctx.lineTo(px - 5.5, py + 8);
+          ctx.lineTo(px + 5.5, py + 8);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.font = "bold 9px ui-monospace, SFMono-Regular, Menlo, monospace";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#34d399";
+          ctx.fillText(`B•S${evt.setupId}`, px, Math.min(innerTop + innerH - 2, py + 17));
+        } else if (evt.action === "SELL") {
+          ctx.fillStyle = "#f43f5e";
+          ctx.beginPath();
+          ctx.moveTo(px, py + 2);
+          ctx.lineTo(px - 5.5, py - 8);
+          ctx.lineTo(px + 5.5, py - 8);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.font = "bold 9px ui-monospace, SFMono-Regular, Menlo, monospace";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#fb7185";
+          ctx.fillText(`S•S${evt.setupId}`, px, Math.max(innerTop + 9, py - 11));
+        } else if (evt.action === "FILTERED") {
+          ctx.fillStyle = "#38bdf8";
+          ctx.beginPath();
+          ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Left Y-axis labels (XAUUSD $)
+      ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.fillStyle = "#e2e8f0";
+      ctx.textAlign = "right";
+      ctx.fillText(`$${maxP.toFixed(0)}`, padLeft - 5, innerTop + 8);
+      ctx.fillText(
+        `$${((maxP + minP) * 0.5).toFixed(0)}`,
+        padLeft - 5,
+        innerTop + innerH * 0.5 + 3
+      );
+      ctx.fillText(`$${minP.toFixed(0)}`, padLeft - 5, innerTop + innerH);
+
+      // Right Y-axis labels (Cumulative Equity %)
+      ctx.fillStyle = "#22d3ee";
+      ctx.textAlign = "left";
+      ctx.fillText(
+        `${maxEq >= 0 ? "+" : ""}${maxEq.toFixed(2)}%`,
+        padLeft + plotW + 5,
+        innerTop + 8
+      );
+      ctx.fillText(`0.00%`, padLeft + plotW + 5, yAtEq(0) + 3);
+      ctx.fillText(
+        `${minEq.toFixed(2)}%`,
+        padLeft + plotW + 5,
+        innerTop + innerH
+      );
+
+      // Top Header Readout
+      const sliceSummary = buildSummaryFromSlice(
+        strat.events,
+        strat.trades,
+        strat.equityCurvePct,
+        strat.drawdownPct,
+        effectiveEnd
+      );
+      const lastSetupId = (strat.activeSetupId[effectiveEnd - 1] || 1) as StrategySetupId;
+      const posBadge =
+        lastPos === 1
+          ? `▲ LONG (${STRATEGY_SETUP_META[lastSetupId].shortName})`
+          : lastPos === -1
+          ? `▼ SHORT (${STRATEGY_SETUP_META[lastSetupId].shortName})`
+          : "● FLAT / SCANNING";
+
+      ctx.textAlign = "left";
+      ctx.fillStyle =
+        lastPos === 1 ? "#10b981" : lastPos === -1 ? "#f43f5e" : "#94a3b8";
+      ctx.fillText(`Signal: ${posBadge}`, padLeft + 4, padTop - 7);
+
+      ctx.fillStyle = "#34d399";
+      ctx.fillText(
+        `Trades: ${sliceSummary.totalTrades} (${sliceSummary.buyCount}B/${sliceSummary.sellCount}S) | Win: ${sliceSummary.winRatePct.toFixed(
+          0
+        )}% | PF: ${sliceSummary.profitFactor.toFixed(2)}`,
+        padLeft + 215,
+        padTop - 7
+      );
+
+      ctx.fillStyle =
+        sliceSummary.totalNetPnlUsd >= 0 ? "#22d3ee" : "#fb7185";
+      ctx.fillText(
+        `Net PnL: ${
+          sliceSummary.totalNetPnlUsd >= 0 ? "+" : ""
+        }$${sliceSummary.totalNetPnlUsd.toFixed(2)}/oz (${
+          sliceSummary.totalReturnPct >= 0 ? "+" : ""
+        }${sliceSummary.totalReturnPct.toFixed(2)}%) | Fakeouts Blocked: ${
+          sliceSummary.blockedFakeouts
+        }`,
+        padLeft + 470,
+        padTop - 7
+      );
     }
 
     // Hover crosshair & bar inspection
@@ -753,6 +1328,12 @@ export default function SynchronizedSubPane2D() {
     icon: React.ReactNode;
   }[] = [
     {
+      id: "signals",
+      label: "Whitepaper Strategy BUY / SELL Signals & Equity",
+      shortLabel: "Buy/Sell Signals",
+      icon: <Target className="w-3.5 h-3.5 text-emerald-400" />,
+    },
+    {
       id: "displacement",
       label: `3D Phase Z-Score & Displacement (${maType} ${maPeriod})`,
       shortLabel: `Z-Score (${maPeriod})`,
@@ -769,6 +1350,12 @@ export default function SynchronizedSubPane2D() {
       label: "Phase Regime Clusters & Attractor Distance",
       shortLabel: "Clusters (K=4)",
       icon: <Boxes className="w-3.5 h-3.5 text-pink-400" />,
+    },
+    {
+      id: "entropy",
+      label: "Phase-Space Entropy (Turning H_Δφ, Ordinal d=3 & Markov)",
+      shortLabel: "Entropy",
+      icon: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
     },
     {
       id: "correlation",

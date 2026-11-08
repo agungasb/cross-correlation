@@ -16,10 +16,6 @@ const nextConfig = {
               source: "/yahoo-proxy/:path*",
               destination: "https://query1.finance.yahoo.com/:path*",
             },
-            {
-              source: "/pyth-pro/:path*",
-              destination: "https://pyth.dourolabs.app/:path*",
-            },
           ];
         },
       }),
