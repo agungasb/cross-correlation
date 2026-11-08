@@ -27,6 +27,7 @@ type GuideSectionId =
   | "geometry"
   | "clusters"
   | "playbook"
+  | "verification"
   | "roadmap";
 
 export default function TechnicalGuidePage() {
@@ -43,6 +44,11 @@ export default function TechnicalGuidePage() {
         id: "playbook",
         label: "5-Setup Playbook",
         icon: <Target className="w-3.5 h-3.5 text-emerald-400" />,
+      },
+      {
+        id: "verification",
+        label: "Manual Check & 6G10",
+        icon: <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />,
       },
       {
         id: "clusters",
@@ -721,6 +727,191 @@ export default function TechnicalGuidePage() {
                     <p className="text-slate-300 mt-0.5">
                       During <code className="text-emerald-300 font-mono">C1: Orbit</code> with strong negative <code className="text-sky-300 font-mono">Lz &lt; -1.0 (CW: FX Leads)</code>, watch the FX leg at the <code className="font-mono">±2σ</code> Bollinger rail—its inflection provides a 1–4 bar leading entry signal before Gold turns.
                     </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* SECTION 5B: MANUAL SIGNAL VERIFICATION GUIDE & 6G10 TELEMETRY */}
+        {(show("verification") || activeFilter === "playbook") && (
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-[#1f293d] pb-2">
+              <CheckCircle2 className="w-5 h-5 text-teal-400" />
+              <h2 className="text-base sm:text-lg font-bold text-white">
+                5B. Manual Signal Verification Guide &amp; 6G10 Multi-Proxy Telemetry
+              </h2>
+            </div>
+
+            {/* 1. What 6G10 Breadth Means */}
+            <div className="bg-gradient-to-br from-[#0e1a24] to-[#111827] border border-teal-500/35 rounded-xl p-4 space-y-2.5 text-xs text-slate-300">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-bold text-teal-300">
+                  How to Read &ldquo;6G10 -77% BEAR / +45% BULL&rdquo; (Current State vs. Prediction)
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                  Causal Telemetry
+                </span>
+              </div>
+              <p className="leading-relaxed">
+                <code className="text-teal-300 font-mono font-bold">6G10 -77% BEAR</code> is a{" "}
+                <strong className="text-white">real-time measurement of current multi-currency Gold momentum and positioning</strong> across all 6 G10 non-USD Gold crosses (<code className="font-mono text-amber-300">XAUEUR, XAUJPY, XAUGBP, XAUCHF, XAUAUD, XAUCAD</code>)—<strong>NOT</strong> a price-percentage forecast (it does not mean Gold will fall 77%).
+              </p>
+              <div className="bg-[#090d16] border border-[#1e293b] rounded-lg p-3 font-mono text-[11px] text-slate-200">
+                Breadth_t = 0.75 · (1/6) Σ tanh(1.35·Δx̃_k,t + 0.35·x̃_k,t) + 0.25 · tanh(0.45·(G_t − G_slow,t)/σ_G,t)
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-1">
+                <div className="bg-[#090d16] border border-emerald-500/25 rounded-lg p-2.5">
+                  <div className="font-bold text-emerald-400">
+                    &gt; +15% (BULL):
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Gold is rising intrinsically across most G10 currencies at once. Confirms <code className="text-emerald-300">▲ BUY</code> trend breakouts (S1, S4) and blocks <code className="text-rose-300">▼ SELL</code> breakouts.
+                  </p>
+                </div>
+                <div className="bg-[#090d16] border border-rose-500/25 rounded-lg p-2.5">
+                  <div className="font-bold text-rose-400">
+                    &lt; -15% (BEAR):
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Synchronized global bullion selling across G10 currencies. Confirms <code className="text-rose-300">▼ SELL</code> breakouts; at extreme readings (<code className="font-mono">-75%..-90%</code>), wait for a 3D Curvature Hook (S3) off the <code className="text-emerald-300">SUP Bounce Zone</code> before buying.
+                  </p>
+                </div>
+                <div className="bg-[#090d16] border border-slate-600/30 rounded-lg p-2.5">
+                  <div className="font-bold text-slate-200">
+                    -15% to +15% (NEUT):
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Cross-gold flows are mixed; 2D <code className="font-mono">XAUUSD</code> moves are mostly passive US Dollar FX noise rather than intrinsic bullion demand.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Where to Find Each Indicator Value in Tools -> Metrics */}
+            <div className="bg-[#111827] border border-[#1f293d] rounded-xl p-4 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-cyan-300">
+                  Where to Find Each Indicator Value in Tools → Metrics (or Matrix › on Mobile)
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Tip: Tap any row in &ldquo;Recent Signals&rdquo; to scrub to that exact bar
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px]">
+                <div className="bg-[#090d16] border border-white/[0.05] rounded-lg p-2.5 space-y-1">
+                  <div className="font-bold text-emerald-300">
+                    Whitepaper Strategy Signals Card
+                  </div>
+                  <div className="text-slate-300">
+                    • <code className="font-mono text-white">Iso-XAUUSD Cut Efficiency</code> (% Orthogonal Cut vs. FX Slide)
+                  </div>
+                  <div className="text-slate-300">
+                    • <code className="font-mono text-white">Conviction (%)</code>, <code className="font-mono text-white">Stop (SL)</code>, <code className="font-mono text-white">Target (TP)</code>, <code className="font-mono text-white">3D Spine</code>
+                  </div>
+                </div>
+                <div className="bg-[#090d16] border border-white/[0.05] rounded-lg p-2.5 space-y-1">
+                  <div className="font-bold text-teal-300">
+                    Cross-Proxy &amp; Bounce Matrix Card
+                  </div>
+                  <div className="text-slate-300">
+                    • <code className="font-mono text-white">Bullion Breadth</code>, <code className="font-mono text-white">Chirality Consensus</code>, <code className="font-mono text-white">Rail Bounce Bias</code>
+                  </div>
+                  <div className="text-slate-300">
+                    • <code className="font-mono text-white">Implied XAUUSD Bounce Zones</code> &amp; <code className="font-mono text-white">6-Triad Z(X)</code>
+                  </div>
+                </div>
+                <div className="bg-[#090d16] border border-white/[0.05] rounded-lg p-2.5 space-y-1">
+                  <div className="font-bold text-cyan-300">
+                    Geometry (#2), Cluster (#6) &amp; Entropy Cards
+                  </div>
+                  <div className="text-slate-300">
+                    • <code className="font-mono text-white">Phase Velocity (v)</code>, <code className="font-mono text-white">3D Curvature (κ)</code>, <code className="font-mono text-white">Coil Score</code>, <code className="font-mono text-white">Turn (Δθ)</code>, <code className="font-mono text-white">Lévy Area (Lz)</code>
+                  </div>
+                  <div className="text-slate-300">
+                    • <code className="font-mono text-white">Regime (C0..C3)</code>, <code className="font-mono text-white">Basin Distance (σ)</code>, <code className="font-mono text-white">Composite Disorder (%)</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Step-by-Step Manual Verification Checklists for All 5 Setups */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
+              {/* S1 Manual Check */}
+              <div className="bg-[#111827] border border-emerald-500/30 rounded-xl p-4 space-y-2">
+                <div className="text-sm font-bold text-emerald-300">
+                  Manual Check — Setup 1: 3D Coil Release (S1)
+                </div>
+                <div className="text-slate-300 space-y-1.5">
+                  <div>
+                    ☑ <strong>1. Prior Coil Build-Up:</strong> Over the prior 3–12 bars, <code className="font-mono text-cyan-300">Compression Coil Score ≥ 42/100</code> (or <code className="font-mono">C0: Coil</code>) with <code className="font-mono text-pink-300">Basin Distance &lt; 1.35σ</code>.
+                  </div>
+                  <div>
+                    ☑ <strong>2. Entropy S/N Filter:</strong> <code className="font-mono text-amber-300">Composite Disorder &lt; 88%</code> (not in white-noise chop).
+                  </div>
+                  <div>
+                    ☑ <strong>3. Breakout Expansion:</strong> Regime switches to <code className="font-mono text-amber-300">C2: Breakout</code> (or <code className="font-mono">C1</code> with <code className="font-mono">v ≥ 0.50 σ/b</code>) and <code className="font-mono text-pink-300">Basin Distance ≥ 1.48σ</code>.
+                  </div>
+                  <div>
+                    ☑ <strong>4. Bullion-Led Cut:</strong> <code className="font-mono text-emerald-300">Iso-Cut Efficiency ≥ 52%</code> &amp; <code className="font-mono text-emerald-300">Lévy Area Lz ≥ -0.10</code>.
+                  </div>
+                  <div>
+                    ☑ <strong>5. Direction:</strong> <code className="text-emerald-400 font-bold">▲ BUY</code> if <code className="font-mono">XAUUSD &gt; 3D Spine (+0.15σ)</code> &amp; rising; <code className="text-rose-400 font-bold">▼ SELL</code> if below spine &amp; falling.
+                  </div>
+                </div>
+              </div>
+
+              {/* S2 Manual Check */}
+              <div className="bg-[#111827] border border-sky-500/30 rounded-xl p-4 space-y-2">
+                <div className="text-sm font-bold text-sky-300">
+                  Manual Check — Setup 2: Fakeout Filter &amp; Fade (S2)
+                </div>
+                <div className="text-slate-300 space-y-1.5">
+                  <div>
+                    ☑ <strong>Part A — Blocked Fakeout (<code className="text-sky-300">✕ S2</code>):</strong> <code className="font-mono text-sky-300">Iso-Cut Efficiency &lt; 52% (FX Slide)</code> + <code className="font-mono text-sky-300">Lévy Area Lz &lt; -0.30 (CW FX Leads)</code> + <code className="font-mono text-pink-300">Basin Distance &lt; 1.65σ</code>.
+                  </div>
+                  <div>
+                    ☑ <strong>Part B — Active Fade (<code className="text-emerald-300">▲ BUY</code> / <code className="text-rose-300">▼ SELL</code>):</strong> All Part A conditions hold + <code className="font-mono">XAUUSD</code> stretched <code className="font-mono">≥ 1.25σ</code> from 3D Spine.
+                  </div>
+                  <div>
+                    ☑ <strong>Stall &amp; Bounce Confirmation:</strong> <code className="font-mono text-amber-300">Phase Velocity (v)</code> decelerates (<code className="font-mono">v_t &lt; v_t-1</code>) or <code className="font-mono">Turn Δθ ≥ 65°</code> with <code className="font-mono text-teal-300">Rail Bounce Bias ≥ +15%</code> toward the 3D Spine.
+                  </div>
+                </div>
+              </div>
+
+              {/* S3 Manual Check */}
+              <div className="bg-[#111827] border border-rose-500/30 rounded-xl p-4 space-y-2">
+                <div className="text-sm font-bold text-rose-300">
+                  Manual Check — Setup 3: Exhaustion Curvature Hook (S3)
+                </div>
+                <div className="text-slate-300 space-y-1.5">
+                  <div>
+                    ☑ <strong>1. Tail Stretch:</strong> Regime is/was <code className="font-mono text-rose-400">C3: Shock</code> or <code className="font-mono text-amber-300">Phase Z-Score ≥ 1.90σ</code>, with <code className="font-mono">XAUUSD ≥ 1.85σ</code> from the 3D Spine.
+                  </div>
+                  <div>
+                    ☑ <strong>2. Liquidity Vacuum:</strong> <code className="font-mono text-pink-300">Basin Distance ≥ 1.71σ (Vacuum)</code>.
+                  </div>
+                  <div>
+                    ☑ <strong>3. Frenet-Serret Hook:</strong> <code className="font-mono text-purple-300">3D Curvature κ ≥ 0.34</code> while <code className="font-mono text-amber-300">Velocity (v)</code> decelerates or <code className="font-mono">Turn Δθ ≥ 75°</code> (or hairpin <code className="font-mono">Δθ ≥ 135°</code> with <code className="font-mono">κ ≥ 0.25</code>).
+                  </div>
+                  <div>
+                    ☑ <strong>4. Cross-Proxy Hook:</strong> Primary Cross-Gold Z-score (<code className="font-mono text-teal-300">x̃_k</code>) hooks <code className="font-mono">≥ 0.22σ</code> back toward <code className="font-mono">0.00σ</code> off its <code className="font-mono">±2σ</code> Bounce Zone.
+                  </div>
+                </div>
+              </div>
+
+              {/* S4 & S5 Manual Check */}
+              <div className="bg-[#111827] border border-purple-500/30 rounded-xl p-4 space-y-2">
+                <div className="text-sm font-bold text-purple-300">
+                  Manual Check — Setup 4 (Vacuum) &amp; Setup 5 (Orbit)
+                </div>
+                <div className="text-slate-300 space-y-1.5">
+                  <div>
+                    ☑ <strong>Setup 4 (Vacuum Transit):</strong> Regime = <code className="font-mono text-amber-300">C2: Breakout</code>, <code className="font-mono text-pink-300">Basin Distance ≥ 1.71σ</code>, high speed <code className="font-mono text-amber-300">v ≥ 0.60 σ/b</code>, straight line (<code className="font-mono text-purple-300">κ &lt; 0.24</code>, <code className="font-mono">Δθ &lt; 65°</code>), <code className="font-mono text-emerald-300">Iso-Cut ≥ 54%</code>, and spine stretch <code className="font-mono">&lt; 2.25σ</code>.
+                  </div>
+                  <div className="pt-1 border-t border-white/[0.06]">
+                    ☑ <strong>Setup 5 (Orbital Rotation):</strong> Regime = <code className="font-mono text-emerald-300">C1: Orbit</code> with Markov <code className="font-mono">→ Orbit ≥ 44%</code>, outer ring (<code className="font-mono">1.15σ ≤ r ≤ 2.25σ</code>, <code className="font-mono">v ≤ 1.35 σ/b</code>), and leading leg (<code className="font-mono">XAUEUR</code> if <code className="font-mono">Lz ≥ +0.50</code>; <code className="font-mono">FX</code> if <code className="font-mono">Lz ≤ -0.50</code>) inflects from <code className="font-mono">≥ 1.10σ</code> back toward the 3D Spine.
                   </div>
                 </div>
               </div>

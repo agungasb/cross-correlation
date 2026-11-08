@@ -257,6 +257,37 @@ To translate the five playbook setups into deterministic, zero-lookahead **BUY (
 3. **Dynamic Volatility Stop-Loss, Spine Target & Causal Equity Curve:**
    * Every `BUY` and `SELL` signal computes causal volatility-scaled Stop-Loss ($G_{\text{stop}}$) and Take-Profit ($G_{\text{tp}}$ or $G_{\text{spine}, t}$), rendered in the 3D Phase-Space Canvas (`strategy-signals-3d`), the 2D `Buy/Sell Signals` Sub-Pane, and the `Metrics` Inspector Sidebar.
 
+### 3.4 Manual Signal Verification Guide & `6G10` Multi-Proxy Telemetry
+
+#### 1. Interpreting `6G10 -77% BEAR / +45% BULL` (Current State vs. Prediction)
+`6G10` evaluates Gold simultaneously across all **6 G10 non-USD currency triads** (`XAUEUR`, `XAUJPY`, `XAUGBP`, `XAUCHF`, `XAUAUD`, `XAUCAD`). The percentage (`-100%` to `+100%`) is a **real-time measurement of current multi-currency Gold momentum and positioning** (not a price-change forecast):
+$$\text{Breadth}_t = 0.75 \cdot \left(\frac{1}{6} \sum_{k=1}^{6} \tanh\!\left(1.35\,\Delta\tilde{x}_{k,t} + 0.35\,\tilde{x}_{k,t}\right)\right) + 0.25 \cdot \tanh\!\left(0.45\,\frac{G_t - G_{\text{slow},t}}{\sigma_{G,t}}\right)$$
+* **`> +15%` (`BULL`)**: Intrinsic bullion buying across G10 currencies; confirms `▲ BUY` trend breakouts (`S1`, `S4`).
+* **`< -15%` (`BEAR`)**: Synchronized bullion selling across G10 currencies; confirms `▼ SELL` breakouts. At extreme readings (`-75%..-90%`), wait for a 3D Curvature Hook (`S3`) off the `SUP` Bounce Zone before buying.
+* **`-15%..+15%` (`NEUT`)**: Mixed cross-currency flow (passive USD noise).
+
+#### 2. Step-by-Step Manual Signal Verification Checklists (`Tools → Metrics` / `Matrix ›`)
+* **Setup 1 (`S1: 3D Coil Release`):**
+  1. Prior 3–12 bars had `Compression Coil Score ≥ 42/100` (or `C0: Coil`) with `Basin Distance < 1.35σ`.
+  2. `Composite Disorder < 88%` (low-entropy filter).
+  3. Regime switches to `C2: Breakout` (or `C1` with `v ≥ 0.50 σ/b`) and `Basin Distance ≥ 1.48σ`.
+  4. `Iso-XAUUSD Cut Efficiency ≥ 52%` and `Lévy Area Lz ≥ -0.10`.
+* **Setup 2 (`S2: Fakeout Filter & Fade`):**
+  1. **Blocked Fakeout (`✕ S2`):** `Iso-Cut Efficiency < 52% (FX Slide)` + `Lévy Area Lz < -0.30 (CW FX Leads)` + `Basin Distance < 1.65σ`.
+  2. **Active Fade (`▲ BUY` / `▼ SELL`):** All 3 fakeout conditions hold + `XAUUSD` stretched `≥ 1.25σ` from `3D Spine` + velocity decelerates (`v_t < v_{t-1}` or `Turn Δθ ≥ 65°`) with `Rail Bounce Bias ≥ +15%`.
+* **Setup 3 (`S3: Exhaustion Curvature Hook`):**
+  1. Regime is/was `C3: Shock` or `Phase Z-Score ≥ 1.90σ` with `XAUUSD ≥ 1.85σ` from `3D Spine`.
+  2. `Basin Distance ≥ 1.71σ (Vacuum)`.
+  3. `3D Curvature κ ≥ 0.34` while velocity decelerates or `Turn Δθ ≥ 75°` (or hairpin `Δθ ≥ 135°` with `κ ≥ 0.25`).
+  4. Primary Cross-Gold Z-score ($\tilde{x}_k$) hooks `≥ 0.22σ` back toward `0.00σ` off its `±2σ` Bounce Zone.
+* **Setup 4 (`S4: Liquidity Vacuum Transit`):**
+  1. Regime = `C2: Breakout` and `Basin Distance ≥ 1.71σ (Vacuum)`.
+  2. High velocity `v ≥ 0.60 σ/b`, straight trajectory (`κ < 0.24`, `Turn Δθ < 65°`), `Iso-Cut ≥ 54%`, and spine stretch `< 2.25σ`.
+* **Setup 5 (`S5: Orbital Rotation`):**
+  1. Regime = `C1: Orbit` with Markov `→ Orbit ≥ 44%` persistence.
+  2. Outer orbital ring (`1.15σ ≤ r ≤ 2.25σ`, `v ≤ 1.35 σ/b`).
+  3. Leading leg (`XAUEUR` if `Lz ≥ +0.50`; `FX` if `Lz ≤ -0.50`) inflects from `≥ 1.10σ` back toward the `3D Spine`.
+
 ---
 
 ## 4. System Architecture & Performance Engineering
