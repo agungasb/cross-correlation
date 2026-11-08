@@ -111,8 +111,8 @@ export default function MarketAnalyzerWorkstation() {
     []
   );
 
-  // Fetch timeframe & triad pair history for the active provider ("yahoo" or "binance")
-  const activeFeedProvider = mode === "binance" ? "binance" : "yahoo";
+  // Fetch timeframe & triad pair history for the active provider ("binance" default or "yahoo")
+  const activeFeedProvider = mode === "yahoo" ? "yahoo" : "binance";
 
   useEffect(() => {
     let cancelled = false;

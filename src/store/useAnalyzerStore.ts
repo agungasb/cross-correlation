@@ -85,7 +85,7 @@ export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
   timeframe: "1m",
   dataSeries: [],
   isLoading: true,
-  mode: "yahoo",
+  mode: "binance",
   isLivePlaying: true,
   trailLength: 250,
   stretch: { x: 1.2, y: 1.2, z: 1.0 },

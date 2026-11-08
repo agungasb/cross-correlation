@@ -597,18 +597,6 @@ export default function TopCommandBar({
         {/* Feed Mode */}
         <div className="flex items-center bg-[#0b101b] p-0.5 rounded border border-[#1f293d] shrink-0">
           <button
-            onClick={() => setMode("yahoo")}
-            className={`flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded text-[11px] sm:text-xs font-medium transition cursor-pointer ${
-              mode === "yahoo"
-                ? "bg-sky-600 text-white"
-                : "text-slate-400 hover:text-white"
-            }`}
-            title="Yahoo Finance Feed (GC=F + FX)"
-          >
-            <Radio className="w-3 h-3" />
-            <span>Yahoo</span>
-          </button>
-          <button
             onClick={() => setMode("binance")}
             className={`flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded text-[11px] sm:text-xs font-medium transition cursor-pointer ${
               mode === "binance"
@@ -619,6 +607,18 @@ export default function TopCommandBar({
           >
             <Flame className="w-3 h-3" />
             <span>Binance</span>
+          </button>
+          <button
+            onClick={() => setMode("yahoo")}
+            className={`flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded text-[11px] sm:text-xs font-medium transition cursor-pointer ${
+              mode === "yahoo"
+                ? "bg-sky-600 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
+            title="Yahoo Finance Feed (GC=F + FX)"
+          >
+            <Radio className="w-3 h-3" />
+            <span>Yahoo</span>
           </button>
           <button
             onClick={() => setMode("sim")}
