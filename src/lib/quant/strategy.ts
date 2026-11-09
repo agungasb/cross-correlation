@@ -205,6 +205,8 @@ export interface WhitepaperStrategyResult {
   stopLossSeries: Float64Array;
   /** Active take-profit level in XAUUSD ($/oz), or NaN when flat */
   takeProfitSeries: Float64Array;
+  /** Active position entry price in XAUUSD ($/oz), or NaN when flat */
+  entryPriceSeries: Float64Array;
   /** Causal cumulative strategy return (%) at bar i */
   equityCurvePct: Float64Array;
   /** Causal cumulative strategy PnL ($/oz) at bar i */
@@ -282,12 +284,14 @@ export function computeWhitepaperStrategy(
   const isoCutEfficiency = new Float64Array(len);
   const stopLossSeries = new Float64Array(len);
   const takeProfitSeries = new Float64Array(len);
+  const entryPriceSeries = new Float64Array(len);
   const equityCurvePct = new Float64Array(len);
   const equityCurveUsd = new Float64Array(len);
   const drawdownPct = new Float64Array(len);
 
   stopLossSeries.fill(Number.NaN);
   takeProfitSeries.fill(Number.NaN);
+  entryPriceSeries.fill(Number.NaN);
 
   const events: StrategySignalEvent[] = [];
   const trades: CompletedTrade[] = [];
@@ -314,6 +318,7 @@ export function computeWhitepaperStrategy(
       isoCutEfficiency,
       stopLossSeries,
       takeProfitSeries,
+      entryPriceSeries,
       equityCurvePct,
       equityCurveUsd,
       drawdownPct,
@@ -1211,6 +1216,7 @@ export function computeWhitepaperStrategy(
     activeSetupId[i] = currPos !== 0 ? currSetup : 0;
     stopLossSeries[i] = activeStop;
     takeProfitSeries[i] = activeTp;
+    entryPriceSeries[i] = currPos !== 0 ? entryPrice : Number.NaN;
   }
 
   const summary = buildSummaryFromSlice(
@@ -1233,6 +1239,7 @@ export function computeWhitepaperStrategy(
     isoCutEfficiency,
     stopLossSeries,
     takeProfitSeries,
+    entryPriceSeries,
     equityCurvePct,
     equityCurveUsd,
     drawdownPct,

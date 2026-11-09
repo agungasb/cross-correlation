@@ -63,6 +63,7 @@ export default function SynchronizedSubPane2D() {
     indicators["vector-ma"]?.params?.maType === "EMA" ? "EMA" : "SMA"
   ) as "SMA" | "EMA";
   const stratCfg = indicators["strategy-signals-3d"]?.params;
+  const stratPeriod = Number(stratCfg?.period ?? 20);
   const coilThreshold = Number(stratCfg?.coilThreshold ?? 42);
   const curvatureHookThreshold = Number(
     stratCfg?.curvatureHookThreshold ?? 0.34
@@ -86,16 +87,11 @@ export default function SynchronizedSubPane2D() {
     );
     const strategy = computeWhitepaperStrategy(dataSeries, {
       pair: triadPair,
-      period: maPeriod,
-      maType,
+      period: stratPeriod,
       coilThreshold,
       curvatureHookThreshold,
       minConfidence,
       crossProxySeries,
-      precomputedMA: ma,
-      precomputedGeo: geo,
-      precomputedClusters: clusters,
-      precomputedEntropy: entropy,
     });
     return { ma, rolling, geo, clusters, entropy, strategy };
   }, [
@@ -103,6 +99,7 @@ export default function SynchronizedSubPane2D() {
     maPeriod,
     maType,
     triadPair,
+    stratPeriod,
     coilThreshold,
     curvatureHookThreshold,
     minConfidence,
@@ -1174,6 +1171,21 @@ export default function SynchronizedSubPane2D() {
           ctx.beginPath();
           ctx.arc(px, py, 2.5, 0, Math.PI * 2);
           ctx.fill();
+        } else if (evt.action === "EXIT") {
+          const isWin = (evt.tradePnlUsd ?? 0) >= 0;
+          const pnlText = `${isWin ? "+" : ""}$${(evt.tradePnlUsd ?? 0).toFixed(1)}`;
+          ctx.fillStyle = isWin ? "#10b981" : "#f43f5e";
+          ctx.beginPath();
+          ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.font = "bold 8px ui-monospace, SFMono-Regular, Menlo, monospace";
+          ctx.textAlign = "center";
+          ctx.fillStyle = isWin ? "#34d399" : "#fb7185";
+          ctx.fillText(pnlText, px, Math.max(innerTop + 8, py - 6));
         }
       }
 

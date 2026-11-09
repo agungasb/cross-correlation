@@ -124,17 +124,16 @@ describe("Quantitative Indicator & Phase Space Engine", () => {
       (b) => (b.timestamp - sampleBars[0].timestamp) / 3600
     );
 
-    // Warm up V8 JIT on a small distinct 16-bar slice so AST compilation is not conflated with 320-bar runtime
-    const warmSlice = sampleBars.slice(0, 16);
+    // Warm up V8 JIT and engine caches on sampleBars so AST compilation is not conflated with 320-bar runtime
     for (const plugin of BUILTIN_INDICATOR_PLUGINS) {
       plugin.buildTraces3D({
-        fullSeries: warmSlice,
-        activeSlice: warmSlice,
+        fullSeries: sampleBars,
+        activeSlice: sampleBars,
         startIdx: 0,
-        effectiveEnd: warmSlice.length,
-        xVals: xVals.slice(0, 16),
-        yVals: yVals.slice(0, 16),
-        zVals: zVals.slice(0, 16),
+        effectiveEnd: sampleBars.length,
+        xVals,
+        yVals,
+        zVals,
         zFloor: 0,
         timeframe: "15m",
         isReplaying: false,

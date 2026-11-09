@@ -86,6 +86,7 @@ export default function TopCommandBar({
     maCfg?.params?.maType === "EMA" ? "EMA" : "SMA"
   ) as "SMA" | "EMA";
   const stratCfg = indicators["strategy-signals-3d"]?.params;
+  const stratPeriod = Number(stratCfg?.period ?? 20);
   const coilThreshold = Number(stratCfg?.coilThreshold ?? 42);
   const curvatureHookThreshold = Number(
     stratCfg?.curvatureHookThreshold ?? 0.34
@@ -101,13 +102,11 @@ export default function TopCommandBar({
     );
     const strat = computeWhitepaperStrategy(dataSeries, {
       pair: triadPair,
-      period: maPeriod,
-      maType,
+      period: stratPeriod,
       coilThreshold,
       curvatureHookThreshold,
       minConfidence,
       crossProxySeries,
-      precomputedMA: ma,
     });
     return { ma, strat };
   }, [
@@ -115,6 +114,7 @@ export default function TopCommandBar({
     maPeriod,
     maType,
     triadPair,
+    stratPeriod,
     coilThreshold,
     curvatureHookThreshold,
     minConfidence,
@@ -160,6 +160,20 @@ export default function TopCommandBar({
           (e.action === "BUY" || e.action === "SELL")
       ) ?? null
     : null;
+
+  // Realized trade matching the last completed position up to effectiveEnd
+  const lastCompletedTrade = stratData
+    ? stratData.trades.findLast((t) => t.exitIndex < effectiveEnd) ?? null
+    : null;
+
+  // Open position unrealized PnL ($/oz) derived from causal entryPriceSeries
+  const entryPriceNow =
+    stratData?.entryPriceSeries[effectiveIdx] ??
+    (latestSignalEvt?.priceXauusd ?? Number.NaN);
+  const openPnlUsd =
+    activePos !== 0 && currentBar && Number.isFinite(entryPriceNow)
+      ? (currentBar.xauusd - entryPriceNow) * activePos
+      : 0;
 
   const buyCount = stratSummary?.buyCount ?? 0;
   const sellCount = stratSummary?.sellCount ?? 0;
@@ -375,17 +389,50 @@ export default function TopCommandBar({
           <span className="text-[10px] font-semibold uppercase text-cyan-300/90 whitespace-nowrap">
             5-Setup Signal · PF {profitFactor.toFixed(2)}
           </span>
-          <span
-            className={`text-xs font-bold font-mono whitespace-nowrap ${
-              activePos === 1
-                ? "text-emerald-400"
-                : activePos === -1
-                ? "text-rose-400"
-                : "text-cyan-300"
-            }`}
-          >
-            {signalText}
-          </span>
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <span
+              className={`text-xs font-bold font-mono ${
+                activePos === 1
+                  ? "text-emerald-400"
+                  : activePos === -1
+                  ? "text-rose-400"
+                  : "text-cyan-300"
+              }`}
+            >
+              {signalText}
+            </span>
+            {activePos !== 0 ? (
+              <span
+                className={`px-1 py-0.2 rounded text-[9px] font-extrabold border ${
+                  openPnlUsd >= 0
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                }`}
+                title={`Active Trade Unrealized PnL: ${
+                  openPnlUsd >= 0 ? "+" : ""
+                }$${openPnlUsd.toFixed(2)}/oz`}
+              >
+                OPEN {openPnlUsd >= 0 ? "+" : ""}${openPnlUsd.toFixed(1)}
+              </span>
+            ) : lastCompletedTrade ? (
+              <span
+                className={`px-1 py-0.2 rounded text-[9px] font-extrabold border ${
+                  lastCompletedTrade.pnlUsd >= 0
+                    ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/45"
+                    : "bg-rose-500/25 text-rose-300 border-rose-500/45"
+                }`}
+                title={`Last Trade: ${lastCompletedTrade.exitReason} (${
+                  lastCompletedTrade.barsHeld
+                }b) · PnL: ${
+                  lastCompletedTrade.pnlUsd >= 0 ? "+" : ""
+                }$${lastCompletedTrade.pnlUsd.toFixed(2)}/oz`}
+              >
+                {lastCompletedTrade.pnlUsd >= 0 ? "WIN" : "LOSS"}{" "}
+                {lastCompletedTrade.pnlUsd >= 0 ? "+" : ""}$
+                {lastCompletedTrade.pnlUsd.toFixed(1)}
+              </span>
+            ) : null}
+          </div>
         </button>
       </div>
 
@@ -419,30 +466,62 @@ export default function TopCommandBar({
                 : "5-SETUP SIGNAL"}
             </span>
 
-            <span className="text-[11px] font-semibold text-slate-200 truncate">
+            <span className="text-[11px] font-semibold text-slate-200 truncate flex items-center gap-1">
               {activePos !== 0 ? (
                 <>
-                  {activeSetupTitle}{" "}
-                  <span className="font-mono text-cyan-300">
+                  <span className="truncate">{activeSetupTitle}</span>{" "}
+                  <span className="font-mono text-cyan-300 shrink-0">
                     ({activeConfidence.toFixed(0)}%)
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                      openPnlUsd >= 0
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                        : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                    }`}
+                    title={`Active Open Position · Unrealized PnL: ${
+                      openPnlUsd >= 0 ? "+" : ""
+                    }$${openPnlUsd.toFixed(2)}/oz`}
+                  >
+                    OPEN {openPnlUsd >= 0 ? "+" : ""}${openPnlUsd.toFixed(1)}
                   </span>
                 </>
               ) : latestSignalEvt ? (
                 <>
-                  Last:{" "}
+                  <span className="shrink-0 text-slate-400">Last:</span>{" "}
                   <span
-                    className={
+                    className={`shrink-0 font-bold ${
                       latestSignalEvt.action === "BUY"
-                        ? "text-emerald-400 font-bold"
-                        : "text-rose-400 font-bold"
-                    }
+                        ? "text-emerald-400"
+                        : "text-rose-400"
+                    }`}
                   >
                     {latestSignalEvt.action === "BUY" ? "▲ BUY" : "▼ SELL"} S
                     {latestSignalEvt.setupId}
                   </span>{" "}
-                  <span className="font-mono text-slate-300">
+                  <span className="font-mono text-slate-300 shrink-0">
                     @${latestSignalEvt.priceXauusd.toFixed(0)}
                   </span>
+                  {lastCompletedTrade && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                        lastCompletedTrade.pnlUsd >= 0
+                          ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/45"
+                          : "bg-rose-500/25 text-rose-300 border-rose-500/45"
+                      }`}
+                      title={`Last Trade: ${lastCompletedTrade.exitReason} (${
+                        lastCompletedTrade.barsHeld
+                      }b held) · PnL: ${
+                        lastCompletedTrade.pnlUsd >= 0 ? "+" : ""
+                      }$${lastCompletedTrade.pnlUsd.toFixed(2)}/oz (${
+                        lastCompletedTrade.returnPct >= 0 ? "+" : ""
+                      }${lastCompletedTrade.returnPct.toFixed(2)}%)`}
+                    >
+                      {lastCompletedTrade.pnlUsd >= 0 ? "WIN" : "LOSS"}{" "}
+                      {lastCompletedTrade.pnlUsd >= 0 ? "+" : ""}$
+                      {lastCompletedTrade.pnlUsd.toFixed(1)}
+                    </span>
+                  )}
                 </>
               ) : (
                 "Scanning 6G10 Triads"

@@ -977,6 +977,7 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
     coilThreshold: 42,
     curvatureHookThreshold: 0.34,
     minConfidence: 52,
+    show3DSignals: true,
     showFloorSignals: true,
     showFilteredFakeouts: true,
   },
@@ -989,6 +990,11 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
       max: 200,
       step: 1,
       presets: [14, 20, 50],
+    },
+    {
+      key: "show3DSignals",
+      label: "3D Signal Marks",
+      type: "boolean",
     },
     {
       key: "coilThreshold",
@@ -1038,6 +1044,7 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
       ctx.params.curvatureHookThreshold ?? 0.34
     );
     const minConfidence = Number(ctx.params.minConfidence ?? 52);
+    const show3DSignals = Boolean(ctx.params.show3DSignals ?? true);
     const showFloorSignals = Boolean(ctx.params.showFloorSignals ?? true);
     const showFilteredFakeouts = Boolean(
       ctx.params.showFilteredFakeouts ?? true
@@ -1045,12 +1052,22 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
     const primaryPair: TriadPairId = ctx.triadPair ?? "EUR";
     const triad = TRIAD_CONFIGS[primaryPair] ?? TRIAD_CONFIGS.EUR;
 
+    if (!show3DSignals) {
+      return [];
+    }
+
+    const crossProxySeries = synthesizeCompanionProxySeries(
+      ctx.fullSeries,
+      primaryPair
+    );
+
     const strat = computeWhitepaperStrategy(ctx.fullSeries, {
       pair: primaryPair,
       period,
       coilThreshold,
       curvatureHookThreshold,
       minConfidence,
+      crossProxySeries,
     });
 
     const buyX: number[] = [];
@@ -1070,16 +1087,34 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
     const filtZ: number[] = [];
     const filtHover: string[] = [];
 
+    const exitX: number[] = [];
+    const exitY: number[] = [];
+    const exitZ: number[] = [];
+    const exitLabels: string[] = [];
+    const exitHover: string[] = [];
+    const exitColors: string[] = [];
+
     const stemX: (number | null)[] = [];
     const stemY: (number | null)[] = [];
     const stemZ: (number | null)[] = [];
 
+    const activeEntryBar =
+      strat.position[ctx.effectiveEnd - 1] !== 0
+        ? strat.events.findLast(
+            (e) =>
+              (e.action === "BUY" || e.action === "SELL") &&
+              e.barIndex < ctx.effectiveEnd
+          )?.barIndex ?? -1
+        : -1;
+
     for (const evt of strat.events) {
-      if (evt.barIndex < ctx.startIdx || evt.barIndex >= ctx.effectiveEnd) {
+      if (evt.barIndex >= ctx.effectiveEnd) {
         continue;
       }
-      const localIdx = evt.barIndex - ctx.startIdx;
-      if (localIdx < 0 || localIdx >= n) continue;
+      if (evt.barIndex < ctx.startIdx && evt.barIndex !== activeEntryBar) {
+        continue;
+      }
+      const localIdx = Math.max(0, Math.min(n - 1, evt.barIndex - ctx.startIdx));
 
       const px = ctx.xVals[localIdx];
       const py = ctx.yVals[localIdx];
@@ -1140,6 +1175,25 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
         filtHover.push(
           `<b>✕ BLOCKED FX FAKEOUT (Setup 2 Filter)</b><br>` +
             `Time: ${evt.datetime} | XAUUSD: $${evt.priceXauusd.toFixed(2)}<br>` +
+            `<i>${evt.rationale}</i>`
+        );
+      } else if (evt.action === "EXIT") {
+        const isWin = (evt.tradePnlUsd ?? 0) >= 0;
+        exitX.push(px);
+        exitY.push(py);
+        exitZ.push(pz);
+        exitLabels.push(
+          `${isWin ? "WIN" : "LOSS"} ${isWin ? "+" : ""}${(
+            evt.tradePnlUsd ?? 0
+          ).toFixed(1)}`
+        );
+        exitColors.push(isWin ? "#10b981" : "#f43f5e");
+        exitHover.push(
+          `<b>[TRADE EXIT] ${isWin ? "PROFIT (WIN)" : "LOSS"}: ${
+            isWin ? "+" : ""
+          }$${(evt.tradePnlUsd ?? 0).toFixed(2)}/oz</b><br>` +
+            `Time: ${evt.datetime}<br>` +
+            `Exit Price: $${evt.priceXauusd.toFixed(2)}<br>` +
             `<i>${evt.rationale}</i>`
         );
       }
@@ -1217,6 +1271,34 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
           size: 4.5,
           color: "#38bdf8",
           symbol: "cross",
+        },
+      });
+    }
+
+    if (exitX.length > 0) {
+      traces.push({
+        type: "scatter3d",
+        mode: "markers+text",
+        name: "Strategy Exits (WIN/LOSS)",
+        x: exitX,
+        y: exitY,
+        z: exitZ,
+        text: exitLabels,
+        textposition: "top center",
+        textfont: {
+          color: exitColors,
+          size: 9,
+        },
+        hovertext: exitHover,
+        hoverinfo: "text",
+        marker: {
+          size: 6,
+          color: exitColors,
+          symbol: "circle",
+          line: {
+            color: "#ffffff",
+            width: 1.2,
+          },
         },
       });
     }

@@ -79,6 +79,7 @@ export default function InspectorSidebar() {
     maCfg?.params?.maType === "EMA" ? "EMA" : "SMA"
   ) as "SMA" | "EMA";
   const stratCfg = indicators["strategy-signals-3d"]?.params;
+  const stratPeriod = Number(stratCfg?.period ?? 20);
   const coilThreshold = Number(stratCfg?.coilThreshold ?? 42);
   const curvatureHookThreshold = Number(
     stratCfg?.curvatureHookThreshold ?? 0.34
@@ -97,16 +98,11 @@ export default function InspectorSidebar() {
     );
     const strategy = computeWhitepaperStrategy(dataSeries, {
       pair: triadPair,
-      period: maPeriod,
-      maType,
+      period: stratPeriod,
       coilThreshold,
       curvatureHookThreshold,
       minConfidence,
       crossProxySeries,
-      precomputedMA: ma,
-      precomputedGeo: geo,
-      precomputedClusters: clusters,
-      precomputedEntropy: entropy,
     });
     return { ma, geo, clusters, entropy, strategy, crossProxySeries };
   }, [
@@ -114,6 +110,7 @@ export default function InspectorSidebar() {
     maPeriod,
     maType,
     triadPair,
+    stratPeriod,
     coilThreshold,
     curvatureHookThreshold,
     minConfidence,
@@ -240,6 +237,10 @@ export default function InspectorSidebar() {
   const visibleSignalEvents = stratData
     ? stratData.events.filter((e) => e.barIndex < effectiveEnd)
     : [];
+  const latestTradeSignalEvt =
+    visibleSignalEvents.findLast(
+      (e) => e.action === "BUY" || e.action === "SELL"
+    ) ?? null;
   const latestEntryOrFilterEvt =
     visibleSignalEvents.findLast(
       (e) => e.action === "BUY" || e.action === "SELL" || e.action === "FILTERED"
@@ -248,6 +249,19 @@ export default function InspectorSidebar() {
     .filter((e) => e.action === "BUY" || e.action === "SELL" || e.action === "FILTERED")
     .slice(-5)
     .reverse();
+
+  const lastCompletedTrade = stratData
+    ? stratData.trades.findLast((t) => t.exitIndex < effectiveEnd) ?? null
+    : null;
+
+  const entryPriceNow =
+    stratData?.entryPriceSeries[latestIdx] ??
+    (latestTradeSignalEvt?.priceXauusd ?? Number.NaN);
+
+  const openPnlUsd =
+    activePos !== 0 && latest && Number.isFinite(entryPriceNow)
+      ? (latest.xauusd - entryPriceNow) * activePos
+      : 0;
 
   const activeCrossProxy =
     memoQuant && activeTab === "stats"
@@ -359,7 +373,7 @@ export default function InspectorSidebar() {
             {BUILTIN_INDICATOR_PLUGINS.map((plugin) => {
               const inst = indicators[plugin.id];
               const enabled = inst?.enabled ?? plugin.defaultEnabled;
-              const params = inst?.params ?? plugin.defaultParams;
+              const params = { ...plugin.defaultParams, ...(inst?.params ?? {}) };
 
               return (
                 <div
@@ -497,6 +511,11 @@ export default function InspectorSidebar() {
                         }
 
                         if (field.type === "boolean") {
+                          const boolVal = Boolean(
+                            val !== undefined
+                              ? val
+                              : (plugin.defaultParams[field.key] ?? true)
+                          );
                           return (
                             <div
                               key={field.key}
@@ -510,16 +529,16 @@ export default function InspectorSidebar() {
                                   setIndicatorParam(
                                     plugin.id,
                                     field.key,
-                                    !Boolean(val)
+                                    !boolVal
                                   )
                                 }
                                 className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                                  val
+                                  boolVal
                                     ? "bg-sky-600/30 text-sky-300 border border-sky-500/40"
                                     : "bg-slate-800 text-slate-400"
                                 }`}
                               >
-                                {val ? "Enabled" : "Hidden"}
+                                {boolVal ? "Enabled" : "Hidden"}
                               </button>
                             </div>
                           );
@@ -737,14 +756,47 @@ export default function InspectorSidebar() {
                 {/* Active Position / Latest Setup Readout */}
                 <div className="bg-[#090d16] border border-[#1e293b] rounded-md p-2 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-white">
-                      {activePos !== 0
-                        ? activeSetupMeta.shortName
-                        : latestEntryOrFilterEvt
-                        ? `Last: ${latestEntryOrFilterEvt.shortLabel}`
-                        : "Awaiting Setup Trigger"}
-                    </span>
-                    <span className="font-mono text-[10px] font-bold text-cyan-300">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[11px] font-bold text-white truncate">
+                        {activePos !== 0
+                          ? activeSetupMeta.shortName
+                          : latestEntryOrFilterEvt
+                          ? `Last: ${latestEntryOrFilterEvt.shortLabel}`
+                          : "Awaiting Setup Trigger"}
+                      </span>
+                      {activePos !== 0 ? (
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                            openPnlUsd >= 0
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                          }`}
+                          title={`Active Open Position · Unrealized PnL: ${
+                            openPnlUsd >= 0 ? "+" : ""
+                          }$${openPnlUsd.toFixed(2)}/oz`}
+                        >
+                          OPEN {openPnlUsd >= 0 ? "+" : ""}${openPnlUsd.toFixed(1)}
+                        </span>
+                      ) : lastCompletedTrade && latestEntryOrFilterEvt?.action !== "FILTERED" ? (
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                            lastCompletedTrade.pnlUsd >= 0
+                              ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/45"
+                              : "bg-rose-500/25 text-rose-300 border-rose-500/45"
+                          }`}
+                          title={`Last Trade: ${lastCompletedTrade.exitReason} (${
+                            lastCompletedTrade.barsHeld
+                          }b held) · PnL: ${
+                            lastCompletedTrade.pnlUsd >= 0 ? "+" : ""
+                          }$${lastCompletedTrade.pnlUsd.toFixed(2)}/oz`}
+                        >
+                          {lastCompletedTrade.pnlUsd >= 0 ? "WIN" : "LOSS"}{" "}
+                          {lastCompletedTrade.pnlUsd >= 0 ? "+" : ""}$
+                          {lastCompletedTrade.pnlUsd.toFixed(1)}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span className="font-mono text-[10px] font-bold text-cyan-300 shrink-0">
                       Conviction: {latestConfidence.toFixed(0)}%
                     </span>
                   </div>
@@ -774,11 +826,15 @@ export default function InspectorSidebar() {
                       </div>
                     )}
 
-                  {latestEntryOrFilterEvt && (
+                  {activePos !== 0 && latestTradeSignalEvt ? (
+                    <p className="text-[10px] text-slate-300 leading-relaxed pt-1 border-t border-white/[0.05]">
+                      {latestTradeSignalEvt.rationale}
+                    </p>
+                  ) : latestEntryOrFilterEvt ? (
                     <p className="text-[10px] text-slate-300 leading-relaxed pt-1 border-t border-white/[0.05]">
                       {latestEntryOrFilterEvt.rationale}
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Iso-Contour Orthogonal Efficiency */}
@@ -868,51 +924,112 @@ export default function InspectorSidebar() {
                       </button>
                     </div>
                     <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
-                      {recentSignals.map((evt) => (
-                        <button
-                          key={`${evt.barIndex}_${evt.action}`}
-                          onClick={() => {
-                            setReplayIndex(evt.barIndex + 1);
-                            setSubPaneMode("signals");
-                            if (
-                              typeof window !== "undefined" &&
-                              window.innerWidth < 768
-                            ) {
-                              setSidebarOpen(false);
+                      {recentSignals.map((evt) => {
+                        const matchingTrade = stratData?.trades.find(
+                          (t) => t.entryIndex === evt.barIndex
+                        );
+                        const isCurrentlyOpen =
+                          activePos !== 0 &&
+                          latestTradeSignalEvt?.barIndex === evt.barIndex;
+                        const unrl =
+                          isCurrentlyOpen && latest
+                            ? (latest.xauusd - evt.priceXauusd) * evt.direction
+                            : 0;
+
+                        return (
+                          <button
+                            key={`${evt.barIndex}_${evt.action}`}
+                            onClick={() => {
+                              setReplayIndex(evt.barIndex + 1);
+                              setSubPaneMode("signals");
+                              if (
+                                typeof window !== "undefined" &&
+                                window.innerWidth < 768
+                              ) {
+                                setSidebarOpen(false);
+                              }
+                            }}
+                            className="w-full text-left bg-[#090d16] hover:bg-[#162033] px-2 py-1 rounded border border-white/[0.05] flex items-center justify-between gap-1.5 transition cursor-pointer"
+                            title={
+                              matchingTrade
+                                ? `${matchingTrade.exitReason} (${
+                                    matchingTrade.barsHeld
+                                  }b held) · PnL: ${
+                                    matchingTrade.pnlUsd >= 0 ? "+" : ""
+                                  }$${matchingTrade.pnlUsd.toFixed(2)}/oz (${
+                                    matchingTrade.returnPct >= 0 ? "+" : ""
+                                  }${matchingTrade.returnPct.toFixed(2)}%)`
+                                : isCurrentlyOpen
+                                ? `Active Open Trade · Unrealized PnL: ${
+                                    unrl >= 0 ? "+" : ""
+                                  }$${unrl.toFixed(2)}/oz`
+                                : evt.rationale
                             }
-                          }}
-                          className="w-full text-left bg-[#090d16] hover:bg-[#162033] px-2 py-1 rounded border border-white/[0.05] flex items-center justify-between gap-1.5 transition cursor-pointer"
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span
-                              className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold shrink-0 ${
-                                evt.action === "BUY"
-                                  ? "bg-emerald-500/20 text-emerald-300"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold shrink-0 ${
+                                  evt.action === "BUY"
+                                    ? "bg-emerald-500/20 text-emerald-300"
+                                    : evt.action === "SELL"
+                                    ? "bg-rose-500/20 text-rose-300"
+                                    : "bg-sky-500/20 text-sky-300"
+                                }`}
+                              >
+                                {evt.action === "BUY"
+                                  ? "▲ BUY"
                                   : evt.action === "SELL"
-                                  ? "bg-rose-500/20 text-rose-300"
-                                  : "bg-sky-500/20 text-sky-300"
-                              }`}
-                            >
-                              {evt.action === "BUY"
-                                ? "▲ BUY"
-                                : evt.action === "SELL"
-                                ? "▼ SELL"
-                                : "✕ S2"}
-                            </span>
-                            <span className="text-[10px] font-semibold text-slate-200 truncate">
-                              S{evt.setupId}: {STRATEGY_SETUP_META[evt.setupId].shortName.replace(/^S\d:\s*/, "")}
-                            </span>
-                          </div>
-                          <div className="text-right font-mono text-[10px] shrink-0">
-                            <span className="text-white font-bold">
-                              ${evt.priceXauusd.toFixed(1)}
-                            </span>
-                            <span className="text-slate-400 ml-1">
-                              ({evt.confidence}%)
-                            </span>
-                          </div>
-                        </button>
-                      ))}
+                                  ? "▼ SELL"
+                                  : "✕ S2"}
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-200 truncate">
+                                S{evt.setupId}:{" "}
+                                {STRATEGY_SETUP_META[
+                                  evt.setupId
+                                ].shortName.replace(/^S\d:\s*/, "")}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+                              <span className="text-white font-bold">
+                                ${evt.priceXauusd.toFixed(0)}
+                              </span>
+
+                              {matchingTrade ? (
+                                <span
+                                  className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                                    matchingTrade.pnlUsd >= 0
+                                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                      : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                                  }`}
+                                >
+                                  {matchingTrade.pnlUsd >= 0 ? "WIN" : "LOSS"}{" "}
+                                  {matchingTrade.pnlUsd >= 0 ? "+" : ""}$
+                                  {matchingTrade.pnlUsd.toFixed(1)}
+                                </span>
+                              ) : isCurrentlyOpen ? (
+                                <span
+                                  className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                                    unrl >= 0
+                                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                      : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                                  }`}
+                                >
+                                  OPEN {unrl >= 0 ? "+" : ""}${unrl.toFixed(1)}
+                                </span>
+                              ) : evt.action === "FILTERED" ? (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0">
+                                  BLOCKED
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">
+                                  ({evt.confidence}%)
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

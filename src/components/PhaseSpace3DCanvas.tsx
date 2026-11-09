@@ -625,9 +625,13 @@ export default function PhaseSpace3DCanvas() {
     for (const plugin of BUILTIN_INDICATOR_PLUGINS) {
       const inst = indicators[plugin.id];
       if (inst && inst.enabled) {
+        const mergedParams = {
+          ...plugin.defaultParams,
+          ...(inst.params ?? {}),
+        };
         const pluginTraces = plugin.buildTraces3D({
           ...renderCtxBase,
-          params: inst.params,
+          params: mergedParams,
         });
         traces.push(...pluginTraces);
       }
