@@ -23,7 +23,10 @@ import {
   ArrowLeftRight,
   Flame,
   Target,
+  RotateCw,
+  Zap,
 } from "lucide-react";
+import { useTradeStore } from "@/store/useTradeStore";
 
 interface TopCommandBarProps {
   onOpenWorkspaceModal: () => void;
@@ -68,6 +71,11 @@ export default function TopCommandBar({
   const trailLength = useAnalyzerStore((s) => s.trailLength);
   const setTrailLength = useAnalyzerStore((s) => s.setTrailLength);
 
+  const executionMode = useTradeStore((s) => s.executionMode);
+  const bridgeHealth = useTradeStore((s) => s.bridgeHealth);
+  const positions = useTradeStore((s) => s.positions);
+  const setMT5ModalOpen = useTradeStore((s) => s.setModalOpen);
+
   const maxTrailBars = timeframe === "1d" ? 250 : 500;
 
   const triad = TRIAD_CONFIGS[triadPair] ?? TRIAD_CONFIGS.EUR;
@@ -92,6 +100,16 @@ export default function TopCommandBar({
     stratCfg?.curvatureHookThreshold ?? 0.34
   );
   const minConfidence = Number(stratCfg?.minConfidence ?? 52);
+  const enableSetup1 =
+    stratCfg?.enableSetup1 !== undefined ? Boolean(stratCfg.enableSetup1) : true;
+  const enableSetup2 =
+    stratCfg?.enableSetup2 !== undefined ? Boolean(stratCfg.enableSetup2) : true;
+  const enableSetup3 =
+    stratCfg?.enableSetup3 !== undefined ? Boolean(stratCfg.enableSetup3) : true;
+  const enableSetup4 =
+    stratCfg?.enableSetup4 !== undefined ? Boolean(stratCfg.enableSetup4) : true;
+  const enableSetup5 =
+    stratCfg?.enableSetup5 !== undefined ? Boolean(stratCfg.enableSetup5) : true;
 
   const stratMemo = useMemo(() => {
     if (dataSeries.length === 0) return null;
@@ -106,6 +124,11 @@ export default function TopCommandBar({
       coilThreshold,
       curvatureHookThreshold,
       minConfidence,
+      enableSetup1,
+      enableSetup2,
+      enableSetup3,
+      enableSetup4,
+      enableSetup5,
       crossProxySeries,
     });
     return { ma, strat };
@@ -118,6 +141,11 @@ export default function TopCommandBar({
     coilThreshold,
     curvatureHookThreshold,
     minConfidence,
+    enableSetup1,
+    enableSetup2,
+    enableSetup3,
+    enableSetup4,
+    enableSetup5,
   ]);
 
   let phaseDeviation = "OFF";
@@ -259,6 +287,30 @@ export default function TopCommandBar({
         {/* Mobile Quick Action Buttons (Guide Popup, Workspaces & Inspector Drawer) */}
         <div className="flex lg:hidden items-center gap-1 shrink-0">
           <button
+            onClick={() => setMT5ModalOpen(true)}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold border transition cursor-pointer ${
+              executionMode === "AUTONOMOUS"
+                ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                : executionMode === "MANUAL"
+                ? "bg-sky-500/20 text-sky-300 border-sky-500/40"
+                : "bg-slate-900 text-slate-300 border-slate-700"
+            }`}
+            title="MT5 Execution Gateway"
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                bridgeHealth?.status === "ok" || bridgeHealth?.connected
+                  ? bridgeHealth?.mode === "mock"
+                    ? "bg-amber-400"
+                    : "bg-emerald-400"
+                  : "bg-rose-400"
+              }`}
+            />
+            <Zap className="w-3 h-3 text-amber-400" />
+            <span>MT5</span>
+          </button>
+
+          <button
             onClick={() => setGuideModalOpen(true)}
             className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 hover:bg-emerald-500/25 transition cursor-pointer"
             title="Open Technical Whitepaper & Playbook Popup"
@@ -375,7 +427,7 @@ export default function TopCommandBar({
           onClick={() => {
             setSubPaneMode("signals");
             setSidebarOpen(true);
-            setActiveSidebarTab("stats");
+            setActiveSidebarTab("playbook");
           }}
           className={`hidden lg:flex text-left rounded px-2.5 py-1 min-w-[148px] flex-col items-start justify-between border transition cursor-pointer ${
             activePos === 1
@@ -722,7 +774,50 @@ export default function TopCommandBar({
               <Play className="w-3 h-3 text-emerald-400" />
             )}
           </button>
+          <button
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.location.href =
+                  window.location.origin +
+                  window.location.pathname +
+                  "?v=" +
+                  Date.now();
+              }
+            }}
+            className="flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded text-[11px] sm:text-xs font-medium text-slate-300 hover:text-cyan-300 hover:bg-white/5 cursor-pointer"
+            title="Force Reload & Sync Latest App Version"
+          >
+            <RotateCw className="w-3 h-3 text-cyan-400" />
+          </button>
         </div>
+
+        {/* MT5 Gateway Execution & Risk Button */}
+        <button
+          onClick={() => setMT5ModalOpen(true)}
+          className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold border transition cursor-pointer shrink-0 ${
+            executionMode === "AUTONOMOUS"
+              ? "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm shadow-rose-950/40"
+              : executionMode === "MANUAL"
+              ? "bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-sm shadow-sky-950/40"
+              : "bg-slate-900/80 text-slate-300 border-slate-700/60 hover:border-slate-500"
+          }`}
+          title="MT5 Broker Execution & Risk Gateway"
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              bridgeHealth?.status === "ok" || bridgeHealth?.connected
+                ? bridgeHealth?.mode === "mock"
+                  ? "bg-amber-400"
+                  : "bg-emerald-400"
+                : "bg-rose-400"
+            }`}
+          />
+          <Zap className="w-3.5 h-3.5 text-amber-400" />
+          <span>
+            MT5: {executionMode}
+            {positions.length > 0 ? ` (${positions.length})` : ""}
+          </span>
+        </button>
 
         {/* Desktop-only Guide Popup, Firebase & Inspector Buttons */}
         <button
@@ -773,7 +868,7 @@ export default function TopCommandBar({
         </span>
         <input
           type="range"
-          min={30}
+          min={10}
           max={maxTrailBars}
           step={10}
           value={Math.min(trailLength, maxTrailBars)}

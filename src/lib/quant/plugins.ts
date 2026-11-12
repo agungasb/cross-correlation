@@ -977,6 +977,11 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
     coilThreshold: 42,
     curvatureHookThreshold: 0.34,
     minConfidence: 52,
+    enableSetup1: true,
+    enableSetup2: true,
+    enableSetup3: true,
+    enableSetup4: true,
+    enableSetup5: true,
     show3DSignals: true,
     showFloorSignals: true,
     showFilteredFakeouts: true,
@@ -1044,6 +1049,26 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
       ctx.params.curvatureHookThreshold ?? 0.34
     );
     const minConfidence = Number(ctx.params.minConfidence ?? 52);
+    const enableSetup1 =
+      ctx.params.enableSetup1 !== undefined
+        ? Boolean(ctx.params.enableSetup1)
+        : true;
+    const enableSetup2 =
+      ctx.params.enableSetup2 !== undefined
+        ? Boolean(ctx.params.enableSetup2)
+        : true;
+    const enableSetup3 =
+      ctx.params.enableSetup3 !== undefined
+        ? Boolean(ctx.params.enableSetup3)
+        : true;
+    const enableSetup4 =
+      ctx.params.enableSetup4 !== undefined
+        ? Boolean(ctx.params.enableSetup4)
+        : true;
+    const enableSetup5 =
+      ctx.params.enableSetup5 !== undefined
+        ? Boolean(ctx.params.enableSetup5)
+        : true;
     const show3DSignals = Boolean(ctx.params.show3DSignals ?? true);
     const showFloorSignals = Boolean(ctx.params.showFloorSignals ?? true);
     const showFilteredFakeouts = Boolean(
@@ -1067,6 +1092,11 @@ export const STRATEGY_SIGNALS_PLUGIN: IndicatorPlugin = {
       coilThreshold,
       curvatureHookThreshold,
       minConfidence,
+      enableSetup1,
+      enableSetup2,
+      enableSetup3,
+      enableSetup4,
+      enableSetup5,
       crossProxySeries,
     });
 

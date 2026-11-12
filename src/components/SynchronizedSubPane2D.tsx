@@ -69,6 +69,16 @@ export default function SynchronizedSubPane2D() {
     stratCfg?.curvatureHookThreshold ?? 0.34
   );
   const minConfidence = Number(stratCfg?.minConfidence ?? 52);
+  const enableSetup1 =
+    stratCfg?.enableSetup1 !== undefined ? Boolean(stratCfg.enableSetup1) : true;
+  const enableSetup2 =
+    stratCfg?.enableSetup2 !== undefined ? Boolean(stratCfg.enableSetup2) : true;
+  const enableSetup3 =
+    stratCfg?.enableSetup3 !== undefined ? Boolean(stratCfg.enableSetup3) : true;
+  const enableSetup4 =
+    stratCfg?.enableSetup4 !== undefined ? Boolean(stratCfg.enableSetup4) : true;
+  const enableSetup5 =
+    stratCfg?.enableSetup5 !== undefined ? Boolean(stratCfg.enableSetup5) : true;
 
   const quantData = useMemo(() => {
     if (dataSeries.length === 0) return null;
@@ -91,6 +101,11 @@ export default function SynchronizedSubPane2D() {
       coilThreshold,
       curvatureHookThreshold,
       minConfidence,
+      enableSetup1,
+      enableSetup2,
+      enableSetup3,
+      enableSetup4,
+      enableSetup5,
       crossProxySeries,
     });
     return { ma, rolling, geo, clusters, entropy, strategy };
@@ -103,6 +118,11 @@ export default function SynchronizedSubPane2D() {
     coilThreshold,
     curvatureHookThreshold,
     minConfidence,
+    enableSetup1,
+    enableSetup2,
+    enableSetup3,
+    enableSetup4,
+    enableSetup5,
   ]);
 
   const effectiveEnd = Math.max(

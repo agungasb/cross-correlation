@@ -27,7 +27,7 @@ export interface AnalyzerState {
   indicators: Record<string, IndicatorInstanceConfig>;
   subPaneMode: SubPaneMode;
   sidebarOpen: boolean;
-  activeSidebarTab: "indicators" | "scene" | "stats";
+  activeSidebarTab: "playbook" | "indicators" | "scene" | "stats";
   guideModalOpen: boolean;
 
   // Timelapse Replay State
@@ -61,7 +61,9 @@ export interface AnalyzerState {
   resetIndicators: () => void;
   setSubPaneMode: (mode: SubPaneMode) => void;
   setSidebarOpen: (open: boolean) => void;
-  setActiveSidebarTab: (tab: "indicators" | "scene" | "stats") => void;
+  setActiveSidebarTab: (
+    tab: "playbook" | "indicators" | "scene" | "stats"
+  ) => void;
   setGuideModalOpen: (open: boolean) => void;
 
   // Replay Actions
@@ -94,7 +96,7 @@ export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
   indicators: createDefaultIndicatorConfigs(),
   subPaneMode: "signals",
   sidebarOpen: true,
-  activeSidebarTab: "indicators",
+  activeSidebarTab: "playbook",
   guideModalOpen: false,
 
   isReplaying: false,
@@ -152,7 +154,7 @@ export const useAnalyzerStore = create<AnalyzerState>((set, get) => ({
     set((state) => ({ isLivePlaying: !state.isLivePlaying })),
 
   setTrailLength: (len) =>
-    set({ trailLength: Math.max(30, Math.min(800, len)) }),
+    set({ trailLength: Math.max(10, Math.min(800, len)) }),
 
   setStretch: (partial) =>
     set((state) => ({

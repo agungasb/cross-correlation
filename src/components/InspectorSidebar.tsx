@@ -23,11 +23,13 @@ import {
 } from "@/lib/quant/math";
 import { CameraPreset, PhaseRegimeId, TRIAD_CONFIGS } from "@/types/market";
 import {
+  Activity,
   BookOpen,
   Box,
   Compass,
   Layers,
   RotateCcw,
+  Settings2,
   Sliders,
   Sparkles,
   Target,
@@ -78,13 +80,35 @@ export default function InspectorSidebar() {
   const maType = (
     maCfg?.params?.maType === "EMA" ? "EMA" : "SMA"
   ) as "SMA" | "EMA";
-  const stratCfg = indicators["strategy-signals-3d"]?.params;
+  const stratInst = indicators["strategy-signals-3d"];
+  const stratMasterEnabled = stratInst?.enabled ?? true;
+  const stratCfg = stratInst?.params;
   const stratPeriod = Number(stratCfg?.period ?? 20);
   const coilThreshold = Number(stratCfg?.coilThreshold ?? 42);
   const curvatureHookThreshold = Number(
     stratCfg?.curvatureHookThreshold ?? 0.34
   );
   const minConfidence = Number(stratCfg?.minConfidence ?? 52);
+  const enableSetup1 =
+    stratCfg?.enableSetup1 !== undefined ? Boolean(stratCfg.enableSetup1) : true;
+  const enableSetup2 =
+    stratCfg?.enableSetup2 !== undefined ? Boolean(stratCfg.enableSetup2) : true;
+  const enableSetup3 =
+    stratCfg?.enableSetup3 !== undefined ? Boolean(stratCfg.enableSetup3) : true;
+  const enableSetup4 =
+    stratCfg?.enableSetup4 !== undefined ? Boolean(stratCfg.enableSetup4) : true;
+  const enableSetup5 =
+    stratCfg?.enableSetup5 !== undefined ? Boolean(stratCfg.enableSetup5) : true;
+  const show3DSignals =
+    stratCfg?.show3DSignals !== undefined ? Boolean(stratCfg.show3DSignals) : true;
+  const showFloorSignals =
+    stratCfg?.showFloorSignals !== undefined
+      ? Boolean(stratCfg.showFloorSignals)
+      : true;
+  const showFilteredFakeouts =
+    stratCfg?.showFilteredFakeouts !== undefined
+      ? Boolean(stratCfg.showFilteredFakeouts)
+      : true;
 
   const memoQuant = useMemo(() => {
     if (dataSeries.length === 0) return null;
@@ -102,6 +126,11 @@ export default function InspectorSidebar() {
       coilThreshold,
       curvatureHookThreshold,
       minConfidence,
+      enableSetup1,
+      enableSetup2,
+      enableSetup3,
+      enableSetup4,
+      enableSetup5,
       crossProxySeries,
     });
     return { ma, geo, clusters, entropy, strategy, crossProxySeries };
@@ -114,6 +143,11 @@ export default function InspectorSidebar() {
     coilThreshold,
     curvatureHookThreshold,
     minConfidence,
+    enableSetup1,
+    enableSetup2,
+    enableSetup3,
+    enableSetup4,
+    enableSetup5,
   ]);
 
   if (!sidebarOpen) return null;
@@ -314,14 +348,28 @@ export default function InspectorSidebar() {
         </div>
 
         {/* Sidebar Navigation Tabs */}
-      <div className="grid grid-cols-3 border-b border-[#1f293d] bg-[#090d16] p-1 gap-1 shrink-0">
+      <div className="grid grid-cols-4 border-b border-[#1f293d] bg-[#090d16] p-1 gap-1 shrink-0">
         <button
-          onClick={() => setActiveTab("indicators")}
-          className={`flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
-            activeTab === "indicators"
+          onClick={() => setActiveTab("playbook")}
+          className={`flex items-center justify-center gap-1 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
+            activeTab === "playbook"
               ? "bg-[#1e293b] text-emerald-400 border border-emerald-500/30"
               : "text-slate-400 hover:text-slate-200"
           }`}
+          title="Whitepaper 5-Setup Strategy Playbook"
+        >
+          <Target className="w-3.5 h-3.5" />
+          <span>Playbook</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("indicators")}
+          className={`flex items-center justify-center gap-1 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
+            activeTab === "indicators"
+              ? "bg-[#1e293b] text-sky-400 border border-sky-500/30"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+          title="3D Quantitative Indicator Overlays"
         >
           <Layers className="w-3.5 h-3.5" />
           <span>Indicators</span>
@@ -329,11 +377,12 @@ export default function InspectorSidebar() {
 
         <button
           onClick={() => setActiveTab("scene")}
-          className={`flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center justify-center gap-1 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
             activeTab === "scene"
-              ? "bg-[#1e293b] text-sky-400 border border-sky-500/30"
+              ? "bg-[#1e293b] text-indigo-400 border border-indigo-500/30"
               : "text-slate-400 hover:text-slate-200"
           }`}
+          title="3D Phase-Space Viewport & Axis Stretch"
         >
           <Box className="w-3.5 h-3.5" />
           <span>3D Scene</span>
@@ -341,11 +390,12 @@ export default function InspectorSidebar() {
 
         <button
           onClick={() => setActiveTab("stats")}
-          className={`flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center justify-center gap-1 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
             activeTab === "stats"
               ? "bg-[#1e293b] text-amber-400 border border-amber-500/30"
               : "text-slate-400 hover:text-slate-200"
           }`}
+          title="Phase-Space Clusters, Markov & Entropy Metrics"
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>Metrics</span>
@@ -354,6 +404,752 @@ export default function InspectorSidebar() {
 
       {/* Tab Body */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {activeTab === "playbook" && (
+          <div className="space-y-3">
+            {/* Playbook Master Header */}
+            <div className="bg-[#111827] border border-[#243048] rounded-lg p-3 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                      stratMasterEnabled ? "bg-emerald-400 animate-pulse" : "bg-slate-600"
+                    }`}
+                  />
+                  <div>
+                    <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                      <span>Whitepaper 5-Setup Playbook</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-tight mt-0.5">
+                      Causal execution across Iso-XAUUSD phase space
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => toggleIndicator("strategy-signals-3d")}
+                  className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 transition cursor-pointer ${
+                    stratMasterEnabled
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : "bg-slate-800 text-slate-400 border border-slate-700"
+                  }`}
+                  title="Toggle Whitepaper Strategy execution"
+                >
+                  {stratMasterEnabled ? "ACTIVE" : "MUTED"}
+                </button>
+              </div>
+
+              {/* 3D Viewport Signal Overlay Quick-Toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-[11px]">
+                <span className="text-slate-400">3D Signal Marks on Chart:</span>
+                <button
+                  onClick={() =>
+                    setIndicatorParam(
+                      "strategy-signals-3d",
+                      "show3DSignals",
+                      !show3DSignals
+                    )
+                  }
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                    show3DSignals
+                      ? "bg-sky-600/30 text-sky-300 border border-sky-500/40"
+                      : "bg-slate-800 text-slate-400"
+                  }`}
+                  title="Show or hide 3D diamond marks on the phase-space chart"
+                >
+                  {show3DSignals ? "Enabled" : "Hidden"}
+                </button>
+              </div>
+            </div>
+
+            {/* Active Position / Latest Setup Readout */}
+            {stratData && (
+              <div className="bg-[#111827] border border-emerald-500/35 rounded-lg p-3 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="font-bold text-emerald-300">
+                      Live Trade Position
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+                      activePos === 1
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        : activePos === -1
+                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                        : "bg-slate-800 text-slate-300 border border-slate-700"
+                    }`}
+                  >
+                    {activePos === 1
+                      ? "▲ BUY / LONG"
+                      : activePos === -1
+                      ? "▼ SELL / SHORT"
+                      : "● FLAT / SCAN"}
+                  </span>
+                </div>
+
+                <div className="bg-[#090d16] border border-[#1e293b] rounded-md p-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[11px] font-bold text-white truncate">
+                        {activePos !== 0
+                          ? activeSetupMeta.shortName
+                          : latestEntryOrFilterEvt
+                          ? `Last: ${latestEntryOrFilterEvt.shortLabel}`
+                          : "Awaiting Setup Trigger"}
+                      </span>
+                      {activePos !== 0 ? (
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                            openPnlUsd >= 0
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                          }`}
+                          title={`Active Open Position · Unrealized PnL: ${
+                            openPnlUsd >= 0 ? "+" : ""
+                          }$${openPnlUsd.toFixed(2)}/oz`}
+                        >
+                          OPEN {openPnlUsd >= 0 ? "+" : ""}${openPnlUsd.toFixed(1)}
+                        </span>
+                      ) : lastCompletedTrade && latestEntryOrFilterEvt?.action !== "FILTERED" ? (
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                            lastCompletedTrade.pnlUsd >= 0
+                              ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/45"
+                              : "bg-rose-500/25 text-rose-300 border-rose-500/45"
+                          }`}
+                          title={`Last Trade: ${lastCompletedTrade.exitReason} (${
+                            lastCompletedTrade.barsHeld
+                          }b held) · PnL: ${
+                            lastCompletedTrade.pnlUsd >= 0 ? "+" : ""
+                          }$${lastCompletedTrade.pnlUsd.toFixed(2)}/oz`}
+                        >
+                          {lastCompletedTrade.pnlUsd >= 0 ? "WIN" : "LOSS"}{" "}
+                          {lastCompletedTrade.pnlUsd >= 0 ? "+" : ""}$
+                          {lastCompletedTrade.pnlUsd.toFixed(1)}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span className="font-mono text-[10px] font-bold text-cyan-300 shrink-0">
+                      Conviction: {latestConfidence.toFixed(0)}%
+                    </span>
+                  </div>
+
+                  {activePos !== 0 &&
+                    Number.isFinite(latestStop) &&
+                    Number.isFinite(latestTp) && (
+                      <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] font-mono">
+                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
+                          <div className="text-slate-400">Stop (SL)</div>
+                          <div className="text-rose-400 font-bold">
+                            ${latestStop.toFixed(1)}
+                          </div>
+                        </div>
+                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
+                          <div className="text-slate-400">Target (TP)</div>
+                          <div className="text-emerald-400 font-bold">
+                            ${latestTp.toFixed(1)}
+                          </div>
+                        </div>
+                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
+                          <div className="text-slate-400">3D Spine</div>
+                          <div className="text-cyan-300 font-bold">
+                            ${latestSpineXau.toFixed(1)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  {activePos !== 0 && latestTradeSignalEvt ? (
+                    <p className="text-[10px] text-slate-300 leading-relaxed pt-1 border-t border-white/[0.05]">
+                      {latestTradeSignalEvt.rationale}
+                    </p>
+                  ) : latestEntryOrFilterEvt ? (
+                    <p className="text-[10px] text-slate-300 leading-relaxed pt-1 border-t border-white/[0.05]">
+                      {latestEntryOrFilterEvt.rationale}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            {/* The 5-Setups Independence Matrix */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Whitepaper Setups Matrix (5 Strategies)
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Independent Toggles
+                </span>
+              </div>
+
+              {([1, 2, 3, 4, 5] as StrategySetupId[]).map((sid) => {
+                const meta = STRATEGY_SETUP_META[sid];
+                const isEnabled =
+                  sid === 1
+                    ? enableSetup1
+                    : sid === 2
+                    ? enableSetup2
+                    : sid === 3
+                    ? enableSetup3
+                    : sid === 4
+                    ? enableSetup4
+                    : enableSetup5;
+                const bucket = stratSummary?.setupBreakdown[sid] ?? {
+                  count: 0,
+                  wins: 0,
+                  netPnlUsd: 0,
+                };
+                const wr =
+                  bucket.count > 0 ? (bucket.wins / bucket.count) * 100 : 0;
+                const isActiveNow = activePos !== 0 && activeSetupId === sid;
+
+                return (
+                  <div
+                    key={sid}
+                    className={`rounded-lg border p-2.5 transition ${
+                      isActiveNow
+                        ? "border-emerald-500/70 bg-emerald-950/20 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
+                        : isEnabled
+                        ? "bg-[#111827] border-[#243048]"
+                        : "bg-[#0b101b]/60 border-[#182132] opacity-60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: meta.color }}
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-white">
+                              {meta.shortName}
+                            </span>
+                            <span
+                              className="text-[9px] px-1 py-0.2 rounded uppercase font-semibold border"
+                              style={{
+                                color: meta.color,
+                                borderColor: `${meta.color}40`,
+                                backgroundColor: `${meta.color}15`,
+                              }}
+                            >
+                              {meta.category}
+                            </span>
+                            {isActiveNow && (
+                              <span className="text-[9px] px-1 py-0.2 rounded font-extrabold uppercase bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 animate-pulse">
+                                ACTIVE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() =>
+                          setIndicatorParam(
+                            "strategy-signals-3d",
+                            `enableSetup${sid}`,
+                            !isEnabled
+                          )
+                        }
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer shrink-0 ${
+                          isEnabled
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                            : "bg-slate-800 text-slate-400 border border-slate-700"
+                        }`}
+                        title={`Toggle ${meta.shortName} on/off`}
+                      >
+                        {isEnabled ? "ON" : "OFF"}
+                      </button>
+                    </div>
+
+                    {/* Per-Setup Performance Diagnostics */}
+                    <div className="grid grid-cols-3 gap-1 mt-2 pt-1.5 border-t border-white/[0.05] text-[10px] font-mono">
+                      <div className="bg-[#090d16] px-1.5 py-0.5 rounded flex justify-between">
+                        <span className="text-slate-400">Trades:</span>
+                        <span className="font-bold text-white">{bucket.count}</span>
+                      </div>
+                      <div className="bg-[#090d16] px-1.5 py-0.5 rounded flex justify-between">
+                        <span className="text-slate-400">Win Rate:</span>
+                        <span
+                          className={`font-bold ${
+                            wr >= 50
+                              ? "text-emerald-400"
+                              : bucket.count > 0
+                              ? "text-amber-400"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          {bucket.count > 0 ? `${wr.toFixed(0)}%` : "--"}
+                        </span>
+                      </div>
+                      <div className="bg-[#090d16] px-1.5 py-0.5 rounded flex justify-between">
+                        <span className="text-slate-400">Net:</span>
+                        <span
+                          className={`font-bold ${
+                            bucket.netPnlUsd > 0
+                              ? "text-emerald-400"
+                              : bucket.netPnlUsd < 0
+                              ? "text-rose-400"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          {bucket.count > 0
+                            ? `${bucket.netPnlUsd >= 0 ? "+" : ""}$${bucket.netPnlUsd.toFixed(1)}`
+                            : "--"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
+                      {meta.summary}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Strategy Engine Parameters */}
+            <div className="bg-[#111827] border border-[#1f293d] rounded-lg p-3 space-y-2.5 text-xs">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                <Settings2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Strategy Parameters</span>
+              </div>
+
+              <div className="space-y-2 pt-1 border-t border-white/[0.06]">
+                {/* Lookback Period */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Lookback Period:</span>
+                    <input
+                      type="number"
+                      min={5}
+                      max={200}
+                      step={1}
+                      value={stratPeriod}
+                      onChange={(e) => {
+                        const num = parseFloat(e.target.value);
+                        if (!Number.isNaN(num)) {
+                          setIndicatorParam(
+                            "strategy-signals-3d",
+                            "period",
+                            Math.max(5, Math.min(200, num))
+                          );
+                        }
+                      }}
+                      className="w-16 bg-[#090d16] border border-[#263248] rounded px-1.5 py-0.5 text-right font-mono text-xs text-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 justify-end">
+                    {[14, 20, 50].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() =>
+                          setIndicatorParam("strategy-signals-3d", "period", p)
+                        }
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                          stratPeriod === p
+                            ? "bg-emerald-600 text-white font-bold"
+                            : "bg-[#162033] text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Coil Score Min */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Coil Score Min:</span>
+                    <input
+                      type="number"
+                      min={15}
+                      max={85}
+                      step={5}
+                      value={coilThreshold}
+                      onChange={(e) => {
+                        const num = parseFloat(e.target.value);
+                        if (!Number.isNaN(num)) {
+                          setIndicatorParam(
+                            "strategy-signals-3d",
+                            "coilThreshold",
+                            Math.max(15, Math.min(85, num))
+                          );
+                        }
+                      }}
+                      className="w-16 bg-[#090d16] border border-[#263248] rounded px-1.5 py-0.5 text-right font-mono text-xs text-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 justify-end">
+                    {[35, 42, 55].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() =>
+                          setIndicatorParam(
+                            "strategy-signals-3d",
+                            "coilThreshold",
+                            p
+                          )
+                        }
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                          coilThreshold === p
+                            ? "bg-emerald-600 text-white font-bold"
+                            : "bg-[#162033] text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Curvature Hook */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Curvature Hook (κ):</span>
+                    <input
+                      type="number"
+                      min={0.16}
+                      max={0.65}
+                      step={0.02}
+                      value={curvatureHookThreshold}
+                      onChange={(e) => {
+                        const num = parseFloat(e.target.value);
+                        if (!Number.isNaN(num)) {
+                          setIndicatorParam(
+                            "strategy-signals-3d",
+                            "curvatureHookThreshold",
+                            Math.max(0.16, Math.min(0.65, num))
+                          );
+                        }
+                      }}
+                      className="w-16 bg-[#090d16] border border-[#263248] rounded px-1.5 py-0.5 text-right font-mono text-xs text-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 justify-end">
+                    {[0.28, 0.34, 0.42].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() =>
+                          setIndicatorParam(
+                            "strategy-signals-3d",
+                            "curvatureHookThreshold",
+                            p
+                          )
+                        }
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                          curvatureHookThreshold === p
+                            ? "bg-emerald-600 text-white font-bold"
+                            : "bg-[#162033] text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Min Conviction */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Min Conviction (%):</span>
+                    <input
+                      type="number"
+                      min={35}
+                      max={85}
+                      step={5}
+                      value={minConfidence}
+                      onChange={(e) => {
+                        const num = parseFloat(e.target.value);
+                        if (!Number.isNaN(num)) {
+                          setIndicatorParam(
+                            "strategy-signals-3d",
+                            "minConfidence",
+                            Math.max(35, Math.min(85, num))
+                          );
+                        }
+                      }}
+                      className="w-16 bg-[#090d16] border border-[#263248] rounded px-1.5 py-0.5 text-right font-mono text-xs text-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 justify-end">
+                    {[45, 52, 65].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() =>
+                          setIndicatorParam(
+                            "strategy-signals-3d",
+                            "minConfidence",
+                            p
+                          )
+                        }
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
+                          minConfidence === p
+                            ? "bg-emerald-600 text-white font-bold"
+                            : "bg-[#162033] text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Floor and Fakeout Booleans */}
+                <div className="flex items-center justify-between text-[11px] pt-1">
+                  <span className="text-slate-400">Z=0 Floor Projection:</span>
+                  <button
+                    onClick={() =>
+                      setIndicatorParam(
+                        "strategy-signals-3d",
+                        "showFloorSignals",
+                        !showFloorSignals
+                      )
+                    }
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                      showFloorSignals
+                        ? "bg-sky-600/30 text-sky-300 border border-sky-500/40"
+                        : "bg-slate-800 text-slate-400"
+                    }`}
+                  >
+                    {showFloorSignals ? "Enabled" : "Hidden"}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400">Blocked FX Fakeouts:</span>
+                  <button
+                    onClick={() =>
+                      setIndicatorParam(
+                        "strategy-signals-3d",
+                        "showFilteredFakeouts",
+                        !showFilteredFakeouts
+                      )
+                    }
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                      showFilteredFakeouts
+                        ? "bg-sky-600/30 text-sky-300 border border-sky-500/40"
+                        : "bg-slate-800 text-slate-400"
+                    }`}
+                  >
+                    {showFilteredFakeouts ? "Enabled" : "Hidden"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Causal Backtest Performance Grid */}
+            {stratSummary && (
+              <div className="bg-[#111827] border border-[#1f293d] rounded-lg p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-1.5">
+                  <span className="font-bold text-slate-200">
+                    Causal Performance Ledger
+                  </span>
+                  <span className="font-mono text-[10px] text-emerald-400 font-bold">
+                    {stratSummary.winRatePct.toFixed(0)}% WR
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Signals (B/S):</span>
+                    <span className="font-mono font-bold text-white">
+                      {stratSummary.buyCount}B / {stratSummary.sellCount}S
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Win Rate:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {stratSummary.winRatePct.toFixed(0)}% ({stratSummary.winningTrades}/{stratSummary.totalTrades})
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Profit Factor:</span>
+                    <span className="font-mono font-bold text-amber-300">
+                      {stratSummary.profitFactor.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Net PnL ($/oz):</span>
+                    <span
+                      className={`font-mono font-bold ${
+                        stratSummary.totalNetPnlUsd >= 0
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                      }`}
+                    >
+                      {stratSummary.totalNetPnlUsd >= 0 ? "+" : ""}$
+                      {stratSummary.totalNetPnlUsd.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400">Sharpe / MaxDD:</span>
+                    <span className="font-mono font-bold text-cyan-300">
+                      {stratSummary.sharpeRatio.toFixed(2)} / -{stratSummary.maxDrawdownPct.toFixed(2)}%
+                    </span>
+                  </div>
+                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
+                    <span className="text-slate-400" title="Setup 2 Fake Dollar-Induced Spikes Blocked">
+                      S2 Blocked:
+                    </span>
+                    <span className="font-mono font-bold text-sky-400">
+                      {stratSummary.blockedFakeouts} spikes
+                    </span>
+                  </div>
+                </div>
+
+                {/* Iso-Contour Orthogonal Efficiency */}
+                <div className="flex justify-between py-1 border-t border-white/[0.04]">
+                  <span className="text-slate-400">
+                    Iso-XAUUSD Cut Efficiency:
+                  </span>
+                  <span
+                    className={`font-mono font-semibold ${
+                      latestCutEff >= 0.55
+                        ? "text-emerald-400"
+                        : "text-sky-400"
+                    }`}
+                  >
+                    {(latestCutEff * 100).toFixed(0)}% (
+                    {latestCutEff >= 0.55 ? "Orthogonal Cut" : "FX Slide"})
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Recent Signal Log (Click to Scrub 3D/2D Replay) */}
+            {recentSignals.length > 0 && (
+              <div className="bg-[#111827] border border-[#1f293d] rounded-lg p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  <span>Recent Signals (Click to Inspect Bar)</span>
+                  <button
+                    onClick={() => {
+                      setSubPaneMode("signals");
+                      if (
+                        typeof window !== "undefined" &&
+                        window.innerWidth < 768
+                      ) {
+                        setSidebarOpen(false);
+                      }
+                    }}
+                    className="text-emerald-400 hover:underline cursor-pointer"
+                  >
+                    2D Equity Chart →
+                  </button>
+                </div>
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                  {recentSignals.map((evt) => {
+                    const matchingTrade = stratData?.trades.find(
+                      (t) => t.entryIndex === evt.barIndex
+                    );
+                    const isCurrentlyOpen =
+                      activePos !== 0 &&
+                      latestTradeSignalEvt?.barIndex === evt.barIndex;
+                    const unrl =
+                      isCurrentlyOpen && latest
+                        ? (latest.xauusd - evt.priceXauusd) * evt.direction
+                        : 0;
+
+                    return (
+                      <button
+                        key={`${evt.barIndex}_${evt.action}`}
+                        onClick={() => {
+                          setReplayIndex(evt.barIndex + 1);
+                          setSubPaneMode("signals");
+                          if (
+                            typeof window !== "undefined" &&
+                            window.innerWidth < 768
+                          ) {
+                            setSidebarOpen(false);
+                          }
+                        }}
+                        className="w-full text-left bg-[#090d16] hover:bg-[#162033] px-2 py-1 rounded border border-white/[0.05] flex items-center justify-between gap-1.5 transition cursor-pointer"
+                        title={
+                          matchingTrade
+                            ? `${matchingTrade.exitReason} (${
+                                matchingTrade.barsHeld
+                              }b held) · PnL: ${
+                                matchingTrade.pnlUsd >= 0 ? "+" : ""
+                              }$${matchingTrade.pnlUsd.toFixed(2)}/oz (${
+                                matchingTrade.returnPct >= 0 ? "+" : ""
+                              }${matchingTrade.returnPct.toFixed(2)}%)`
+                            : evt.rationale
+                        }
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span
+                            className={`px-1 py-0.2 rounded text-[9px] font-extrabold shrink-0 ${
+                              evt.action === "BUY"
+                                ? "bg-emerald-500/20 text-emerald-300"
+                                : evt.action === "SELL"
+                                ? "bg-rose-500/20 text-rose-300"
+                                : "bg-sky-500/20 text-sky-300"
+                            }`}
+                          >
+                            {evt.action === "BUY"
+                              ? "▲ BUY"
+                              : evt.action === "SELL"
+                              ? "▼ SELL"
+                              : "✕ S2"}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-200 truncate">
+                            S{evt.setupId}:{" "}
+                            {STRATEGY_SETUP_META[
+                              evt.setupId
+                            ].shortName.replace(/^S\d:\s*/, "")}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+                          <span className="text-white font-bold">
+                            ${evt.priceXauusd.toFixed(0)}
+                          </span>
+
+                          {matchingTrade ? (
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                                matchingTrade.pnlUsd >= 0
+                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                  : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                              }`}
+                            >
+                              {matchingTrade.pnlUsd >= 0 ? "WIN" : "LOSS"}{" "}
+                              {matchingTrade.pnlUsd >= 0 ? "+" : ""}$
+                              {matchingTrade.pnlUsd.toFixed(1)}
+                            </span>
+                          ) : isCurrentlyOpen ? (
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
+                                unrl >= 0
+                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                  : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                              }`}
+                            >
+                              OPEN {unrl >= 0 ? "+" : ""}${unrl.toFixed(1)}
+                            </span>
+                          ) : evt.action === "FILTERED" ? (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0">
+                              BLOCKED
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">
+                              ({evt.confidence}%)
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === "indicators" && (
           <>
             <div className="flex items-center justify-between">
@@ -370,7 +1166,7 @@ export default function InspectorSidebar() {
               </button>
             </div>
 
-            {BUILTIN_INDICATOR_PLUGINS.map((plugin) => {
+            {BUILTIN_INDICATOR_PLUGINS.filter((p) => p.id !== "strategy-signals-3d").map((plugin) => {
               const inst = indicators[plugin.id];
               const enabled = inst?.enabled ?? plugin.defaultEnabled;
               const params = { ...plugin.defaultParams, ...(inst?.params ?? {}) };
@@ -726,316 +1522,6 @@ export default function InspectorSidebar() {
 
         {activeTab === "stats" && (
           <div className="space-y-3">
-            {/* Whitepaper 5-Setup Strategy & Signal Engine Card */}
-            {stratData && stratSummary && (
-              <div className="bg-[#111827] border border-emerald-500/35 rounded-lg p-3 space-y-2.5 text-xs">
-                <div className="flex items-center justify-between border-b border-white/[0.06] pb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <Target className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="font-bold text-emerald-300">
-                      Whitepaper Strategy Signals
-                    </span>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
-                      activePos === 1
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                        : activePos === -1
-                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
-                        : "bg-slate-800 text-slate-300 border border-slate-700"
-                    }`}
-                  >
-                    {activePos === 1
-                      ? "▲ BUY / LONG"
-                      : activePos === -1
-                      ? "▼ SELL / SHORT"
-                      : "● FLAT / SCAN"}
-                  </span>
-                </div>
-
-                {/* Active Position / Latest Setup Readout */}
-                <div className="bg-[#090d16] border border-[#1e293b] rounded-md p-2 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[11px] font-bold text-white truncate">
-                        {activePos !== 0
-                          ? activeSetupMeta.shortName
-                          : latestEntryOrFilterEvt
-                          ? `Last: ${latestEntryOrFilterEvt.shortLabel}`
-                          : "Awaiting Setup Trigger"}
-                      </span>
-                      {activePos !== 0 ? (
-                        <span
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
-                            openPnlUsd >= 0
-                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                              : "bg-rose-500/20 text-rose-300 border-rose-500/40"
-                          }`}
-                          title={`Active Open Position · Unrealized PnL: ${
-                            openPnlUsd >= 0 ? "+" : ""
-                          }$${openPnlUsd.toFixed(2)}/oz`}
-                        >
-                          OPEN {openPnlUsd >= 0 ? "+" : ""}${openPnlUsd.toFixed(1)}
-                        </span>
-                      ) : lastCompletedTrade && latestEntryOrFilterEvt?.action !== "FILTERED" ? (
-                        <span
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
-                            lastCompletedTrade.pnlUsd >= 0
-                              ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/45"
-                              : "bg-rose-500/25 text-rose-300 border-rose-500/45"
-                          }`}
-                          title={`Last Trade: ${lastCompletedTrade.exitReason} (${
-                            lastCompletedTrade.barsHeld
-                          }b held) · PnL: ${
-                            lastCompletedTrade.pnlUsd >= 0 ? "+" : ""
-                          }$${lastCompletedTrade.pnlUsd.toFixed(2)}/oz`}
-                        >
-                          {lastCompletedTrade.pnlUsd >= 0 ? "WIN" : "LOSS"}{" "}
-                          {lastCompletedTrade.pnlUsd >= 0 ? "+" : ""}$
-                          {lastCompletedTrade.pnlUsd.toFixed(1)}
-                        </span>
-                      ) : null}
-                    </div>
-                    <span className="font-mono text-[10px] font-bold text-cyan-300 shrink-0">
-                      Conviction: {latestConfidence.toFixed(0)}%
-                    </span>
-                  </div>
-
-                  {activePos !== 0 &&
-                    Number.isFinite(latestStop) &&
-                    Number.isFinite(latestTp) && (
-                      <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] font-mono">
-                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
-                          <div className="text-slate-400">Stop (SL)</div>
-                          <div className="text-rose-400 font-bold">
-                            ${latestStop.toFixed(1)}
-                          </div>
-                        </div>
-                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
-                          <div className="text-slate-400">Target (TP)</div>
-                          <div className="text-emerald-400 font-bold">
-                            ${latestTp.toFixed(1)}
-                          </div>
-                        </div>
-                        <div className="bg-[#111827] px-1.5 py-1 rounded border border-white/[0.04]">
-                          <div className="text-slate-400">3D Spine</div>
-                          <div className="text-cyan-300 font-bold">
-                            ${latestSpineXau.toFixed(1)}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                  {activePos !== 0 && latestTradeSignalEvt ? (
-                    <p className="text-[10px] text-slate-300 leading-relaxed pt-1 border-t border-white/[0.05]">
-                      {latestTradeSignalEvt.rationale}
-                    </p>
-                  ) : latestEntryOrFilterEvt ? (
-                    <p className="text-[10px] text-slate-300 leading-relaxed pt-1 border-t border-white/[0.05]">
-                      {latestEntryOrFilterEvt.rationale}
-                    </p>
-                  ) : null}
-                </div>
-
-                {/* Iso-Contour Orthogonal Efficiency */}
-                <div className="flex justify-between py-0.5 border-b border-white/[0.04]">
-                  <span className="text-slate-400">
-                    Iso-XAUUSD Cut Efficiency:
-                  </span>
-                  <span
-                    className={`font-mono font-semibold ${
-                      latestCutEff >= 0.55
-                        ? "text-emerald-400"
-                        : "text-sky-400"
-                    }`}
-                  >
-                    {(latestCutEff * 100).toFixed(0)}% (
-                    {latestCutEff >= 0.55 ? "Orthogonal Cut" : "FX Slide"})
-                  </span>
-                </div>
-
-                {/* Causal Backtest Performance Grid */}
-                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
-                    <span className="text-slate-400">Signals (B/S):</span>
-                    <span className="font-mono font-bold text-white">
-                      {stratSummary.buyCount}B / {stratSummary.sellCount}S
-                    </span>
-                  </div>
-                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
-                    <span className="text-slate-400">Win Rate:</span>
-                    <span className="font-mono font-bold text-emerald-400">
-                      {stratSummary.winRatePct.toFixed(0)}% ({stratSummary.winningTrades}/{stratSummary.totalTrades})
-                    </span>
-                  </div>
-                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
-                    <span className="text-slate-400">Profit Factor:</span>
-                    <span className="font-mono font-bold text-amber-300">
-                      {stratSummary.profitFactor.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
-                    <span className="text-slate-400">Net PnL ($/oz):</span>
-                    <span
-                      className={`font-mono font-bold ${
-                        stratSummary.totalNetPnlUsd >= 0
-                          ? "text-emerald-400"
-                          : "text-rose-400"
-                      }`}
-                    >
-                      {stratSummary.totalNetPnlUsd >= 0 ? "+" : ""}$
-                      {stratSummary.totalNetPnlUsd.toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
-                    <span className="text-slate-400">Sharpe / MaxDD:</span>
-                    <span className="font-mono font-bold text-cyan-300">
-                      {stratSummary.sharpeRatio.toFixed(2)} / -{stratSummary.maxDrawdownPct.toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="bg-[#090d16] px-2 py-1.5 rounded border border-white/[0.05] flex justify-between">
-                    <span className="text-slate-400" title="Setup 2 Fake Dollar-Induced Spikes Blocked">
-                      S2 Blocked:
-                    </span>
-                    <span className="font-mono font-bold text-sky-400">
-                      {stratSummary.blockedFakeouts} spikes
-                    </span>
-                  </div>
-                </div>
-
-                {/* Recent Signal Log (Click to Scrub 3D/2D Replay) */}
-                {recentSignals.length > 0 && (
-                  <div className="space-y-1 pt-1 border-t border-white/[0.06]">
-                    <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                      <span>Recent Signals (Click to Inspect Bar)</span>
-                      <button
-                        onClick={() => {
-                          setSubPaneMode("signals");
-                          if (
-                            typeof window !== "undefined" &&
-                            window.innerWidth < 768
-                          ) {
-                            setSidebarOpen(false);
-                          }
-                        }}
-                        className="text-emerald-400 hover:underline cursor-pointer"
-                      >
-                        2D Equity Chart →
-                      </button>
-                    </div>
-                    <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
-                      {recentSignals.map((evt) => {
-                        const matchingTrade = stratData?.trades.find(
-                          (t) => t.entryIndex === evt.barIndex
-                        );
-                        const isCurrentlyOpen =
-                          activePos !== 0 &&
-                          latestTradeSignalEvt?.barIndex === evt.barIndex;
-                        const unrl =
-                          isCurrentlyOpen && latest
-                            ? (latest.xauusd - evt.priceXauusd) * evt.direction
-                            : 0;
-
-                        return (
-                          <button
-                            key={`${evt.barIndex}_${evt.action}`}
-                            onClick={() => {
-                              setReplayIndex(evt.barIndex + 1);
-                              setSubPaneMode("signals");
-                              if (
-                                typeof window !== "undefined" &&
-                                window.innerWidth < 768
-                              ) {
-                                setSidebarOpen(false);
-                              }
-                            }}
-                            className="w-full text-left bg-[#090d16] hover:bg-[#162033] px-2 py-1 rounded border border-white/[0.05] flex items-center justify-between gap-1.5 transition cursor-pointer"
-                            title={
-                              matchingTrade
-                                ? `${matchingTrade.exitReason} (${
-                                    matchingTrade.barsHeld
-                                  }b held) · PnL: ${
-                                    matchingTrade.pnlUsd >= 0 ? "+" : ""
-                                  }$${matchingTrade.pnlUsd.toFixed(2)}/oz (${
-                                    matchingTrade.returnPct >= 0 ? "+" : ""
-                                  }${matchingTrade.returnPct.toFixed(2)}%)`
-                                : isCurrentlyOpen
-                                ? `Active Open Trade · Unrealized PnL: ${
-                                    unrl >= 0 ? "+" : ""
-                                  }$${unrl.toFixed(2)}/oz`
-                                : evt.rationale
-                            }
-                          >
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span
-                                className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold shrink-0 ${
-                                  evt.action === "BUY"
-                                    ? "bg-emerald-500/20 text-emerald-300"
-                                    : evt.action === "SELL"
-                                    ? "bg-rose-500/20 text-rose-300"
-                                    : "bg-sky-500/20 text-sky-300"
-                                }`}
-                              >
-                                {evt.action === "BUY"
-                                  ? "▲ BUY"
-                                  : evt.action === "SELL"
-                                  ? "▼ SELL"
-                                  : "✕ S2"}
-                              </span>
-                              <span className="text-[10px] font-semibold text-slate-200 truncate">
-                                S{evt.setupId}:{" "}
-                                {STRATEGY_SETUP_META[
-                                  evt.setupId
-                                ].shortName.replace(/^S\d:\s*/, "")}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
-                              <span className="text-white font-bold">
-                                ${evt.priceXauusd.toFixed(0)}
-                              </span>
-
-                              {matchingTrade ? (
-                                <span
-                                  className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
-                                    matchingTrade.pnlUsd >= 0
-                                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                                      : "bg-rose-500/20 text-rose-300 border-rose-500/40"
-                                  }`}
-                                >
-                                  {matchingTrade.pnlUsd >= 0 ? "WIN" : "LOSS"}{" "}
-                                  {matchingTrade.pnlUsd >= 0 ? "+" : ""}$
-                                  {matchingTrade.pnlUsd.toFixed(1)}
-                                </span>
-                              ) : isCurrentlyOpen ? (
-                                <span
-                                  className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold border shrink-0 ${
-                                    unrl >= 0
-                                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                                      : "bg-rose-500/20 text-rose-300 border-rose-500/40"
-                                  }`}
-                                >
-                                  OPEN {unrl >= 0 ? "+" : ""}${unrl.toFixed(1)}
-                                </span>
-                              ) : evt.action === "FILTERED" ? (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0">
-                                  BLOCKED
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">
-                                  ({evt.confidence}%)
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Cross-Proxy Confluence & Implied XAUUSD Bounce Matrix */}
             {activeCrossProxy && (
               <div className="bg-gradient-to-b from-[#0e1a24] to-[#111827] border border-teal-500/35 rounded-lg p-3 space-y-2.5 text-xs shadow-lg">

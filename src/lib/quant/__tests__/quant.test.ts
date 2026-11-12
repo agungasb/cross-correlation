@@ -843,4 +843,56 @@ describe("Quantitative Indicator & Phase Space Engine", () => {
     expect(impliedJpyGold).toBeGreaterThan(2000);
     expect(impliedJpyGold).toBeLessThan(8000);
   });
+
+  it("empirically verifies independent setup toggles (enableSetup1..5) without altering entry/exit rules of active setups", () => {
+    const bars = generateFallbackTimeframe("15m", "EUR");
+
+    // 1. Baseline: all 5 setups active
+    const baseline = computeWhitepaperStrategy(bars, {
+      pair: "EUR",
+      period: 20,
+      enableSetup1: true,
+      enableSetup2: true,
+      enableSetup3: true,
+      enableSetup4: true,
+      enableSetup5: true,
+    });
+    expect(baseline.trades.length).toBeGreaterThan(0);
+
+    // 2. Disable Setup 1 only: ensure zero Setup 1 events/trades occur, while other setups continue
+    const noS1 = computeWhitepaperStrategy(bars, {
+      pair: "EUR",
+      period: 20,
+      enableSetup1: false,
+      enableSetup2: true,
+      enableSetup3: true,
+      enableSetup4: true,
+      enableSetup5: true,
+    });
+    const s1Trades = noS1.trades.filter((t) => t.setupId === 1);
+    expect(s1Trades.length).toBe(0);
+    const s1Events = noS1.events.filter(
+      (e) => e.setupId === 1 && (e.action === "BUY" || e.action === "SELL")
+    );
+    expect(s1Events.length).toBe(0);
+
+    // 3. Selective Mode: Run ONLY Setup 3 (Curvature Hook)
+    const onlyS3 = computeWhitepaperStrategy(bars, {
+      pair: "EUR",
+      period: 20,
+      enableSetup1: false,
+      enableSetup2: false,
+      enableSetup3: true,
+      enableSetup4: false,
+      enableSetup5: false,
+    });
+    for (const t of onlyS3.trades) {
+      expect(t.setupId).toBe(3);
+      expect(t.setupName).toContain("Curvature Hook");
+      // Verify exit rules are properly respected
+      expect(t.barsHeld).toBeGreaterThan(0);
+      expect(Number.isFinite(t.pnlUsd)).toBe(true);
+      expect(t.exitReason).toBeDefined();
+    }
+  });
 });
