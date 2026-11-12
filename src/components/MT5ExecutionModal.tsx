@@ -79,17 +79,17 @@ export default function MT5ExecutionModal() {
   const totalFloatingPnl = positions.reduce((acc, p) => acc + p.profit, 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0f172a] border border-slate-700/80 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none">
+      <div className="bg-[#0b101b] border border-[#24324b] rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-800">
+        <div className="px-5 py-4 border-b border-[#1f293d] flex items-center justify-between bg-[#090d16]">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
               <Zap className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
-                MT5 Broker Execution & Risk Gateway
+                MT5 Broker Execution &amp; Risk Gateway
                 <span
                   className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                     isConnected
@@ -109,14 +109,14 @@ export default function MT5ExecutionModal() {
           </div>
           <button
             onClick={() => setModalOpen(false)}
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Mode Selector Ribbon */}
-        <div className="px-5 py-3 bg-slate-950/60 border-b border-slate-800/80 flex items-center justify-between gap-4 flex-wrap">
+        <div className="px-5 py-3 bg-[#0d131f] border-b border-[#1f293d] flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-semibold text-slate-400 mr-2">Execution Mode:</span>
             {(["OFF", "MANUAL", "AUTONOMOUS"] as ExecutionMode[]).map((m) => {
@@ -132,7 +132,7 @@ export default function MT5ExecutionModal() {
                         : m === "MANUAL"
                         ? "bg-sky-600 text-white shadow-lg shadow-sky-900/40"
                         : "bg-slate-700 text-slate-200"
-                      : "bg-slate-800/70 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                      : "bg-[#111827] text-slate-400 hover:text-slate-200 hover:bg-[#1a2336] border border-[#1f293d]"
                   }`}
                 >
                   {m === "AUTONOMOUS" && "⚡ Auto-Trade"}
@@ -146,8 +146,8 @@ export default function MT5ExecutionModal() {
           <button
             onClick={() => pollBridgeStatus()}
             disabled={isPolling}
-            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 transition"
-            title="Refresh Account & Positions"
+            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-2.5 py-1 rounded bg-[#111827] hover:bg-[#1a2336] border border-[#1f293d] transition cursor-pointer"
+            title="Refresh Account &amp; Positions"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isPolling ? "animate-spin text-sky-400" : ""}`} />
             <span>Sync Broker</span>
@@ -155,22 +155,22 @@ export default function MT5ExecutionModal() {
         </div>
 
         {/* Account Metrics Bar */}
-        <div className="px-5 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/40 border-b border-slate-800/60 text-xs">
-          <div className="p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
+        <div className="px-5 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#0b101b] border-b border-[#1f293d] text-xs">
+          <div className="p-2.5 rounded-lg bg-[#111827] border border-[#1f293d]">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Balance</span>
             <span className="text-sm font-bold text-white">
               {account ? `$${account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}
             </span>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
+          <div className="p-2.5 rounded-lg bg-[#111827] border border-[#1f293d]">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Equity</span>
             <span className="text-sm font-bold text-emerald-400">
               {account ? `$${account.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}
             </span>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
+          <div className="p-2.5 rounded-lg bg-[#111827] border border-[#1f293d]">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Floating PnL</span>
             <span
               className={`text-sm font-bold ${
@@ -183,7 +183,7 @@ export default function MT5ExecutionModal() {
             </span>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
+          <div className="p-2.5 rounded-lg bg-[#111827] border border-[#1f293d]">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Free Margin</span>
             <span className="text-sm font-bold text-slate-200">
               {account ? `$${account.margin_free.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}
@@ -192,7 +192,7 @@ export default function MT5ExecutionModal() {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-800 px-5 pt-2 gap-4 text-xs font-semibold">
+        <div className="flex border-b border-[#1f293d] bg-[#0b101b] px-5 pt-2 gap-4 text-xs font-semibold">
           <button
             onClick={() => setActiveTab("positions")}
             className={`pb-2.5 transition border-b-2 cursor-pointer ${
@@ -212,7 +212,7 @@ export default function MT5ExecutionModal() {
             }`}
           >
             <Scale className="w-3.5 h-3.5" />
-            <span>Feed Reconciliation & Basis Guard</span>
+            <span>Feed Reconciliation &amp; Basis Guard</span>
             {basisDrift !== null && basisDriftAbs !== null && (
               <span
                 className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
@@ -235,12 +235,12 @@ export default function MT5ExecutionModal() {
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
-            Risk & Gateway Settings
+            Risk &amp; Gateway Settings
           </button>
         </div>
 
         {/* Tab Body */}
-        <div className="p-5 flex-1 overflow-y-auto space-y-4 text-xs">
+        <div className="p-5 flex-1 overflow-y-auto space-y-4 text-xs bg-[#0b101b]">
           {activeTab === "positions" && (
             <div>
               {positions.length === 0 ? (
@@ -252,10 +252,10 @@ export default function MT5ExecutionModal() {
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-800">
+                <div className="overflow-x-auto rounded-lg border border-[#1f293d] bg-[#090d16]">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="bg-slate-900/80 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                      <tr className="bg-[#111827] text-[10px] uppercase tracking-wider text-slate-400 border-b border-[#1f293d]">
                         <th className="p-2.5">Ticket</th>
                         <th className="p-2.5">Symbol</th>
                         <th className="p-2.5">Type</th>
@@ -267,11 +267,11 @@ export default function MT5ExecutionModal() {
                         <th className="p-2.5 text-right">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                    <tbody className="divide-y divide-[#1f293d] font-mono text-[11px]">
                       {positions.map((p) => {
                         const isBuy = p.direction === "BUY";
                         return (
-                          <tr key={p.ticket} className="hover:bg-slate-800/30">
+                          <tr key={p.ticket} className="hover:bg-[#111827]">
                             <td className="p-2.5 text-slate-400">{p.ticket}</td>
                             <td className="p-2.5 font-bold text-white">{p.symbol}</td>
                             <td className="p-2.5">
@@ -300,7 +300,7 @@ export default function MT5ExecutionModal() {
                             <td className="p-2.5 text-right font-sans">
                               <button
                                 onClick={() => closePosition(p.ticket)}
-                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 hover:bg-rose-900/60 hover:text-rose-300 text-slate-300 border border-slate-700 transition cursor-pointer"
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#111827] hover:bg-rose-900/60 hover:text-rose-300 text-slate-300 border border-[#24324b] transition cursor-pointer"
                               >
                                 Close
                               </button>
@@ -319,7 +319,7 @@ export default function MT5ExecutionModal() {
             <div className="space-y-4">
               {/* Basis Comparison Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
+                <div className="p-3 rounded-lg bg-[#111827] border border-[#1f293d]">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">
                     WebApp Signal Feed (XAUUSD)
                   </span>
@@ -331,7 +331,7 @@ export default function MT5ExecutionModal() {
                   </span>
                 </div>
 
-                <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
+                <div className="p-3 rounded-lg bg-[#111827] border border-[#1f293d]">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">
                     MT5 Broker Quote (Bid / Ask)
                   </span>
@@ -345,7 +345,7 @@ export default function MT5ExecutionModal() {
                   </span>
                 </div>
 
-                <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
+                <div className="p-3 rounded-lg bg-[#111827] border border-[#1f293d]">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">
                     Instantaneous Basis Drift
                   </span>
@@ -377,7 +377,7 @@ export default function MT5ExecutionModal() {
               </div>
 
               {/* SL / TP Mode Selection */}
-              <div className="p-3.5 rounded-lg bg-slate-950/70 border border-slate-800 space-y-2.5">
+              <div className="p-3.5 rounded-lg bg-[#090d16] border border-[#1f293d] space-y-2.5">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
                   <span>SL / TP Anchoring Strategy (Basis Risk Elimination)</span>
@@ -392,8 +392,8 @@ export default function MT5ExecutionModal() {
                     onClick={() => setSlTpMode("RELATIVE_POINTS")}
                     className={`p-3 rounded-lg border cursor-pointer transition flex flex-col justify-between ${
                       slTpMode === "RELATIVE_POINTS"
-                        ? "bg-emerald-950/30 border-emerald-500/70 text-white shadow-sm shadow-emerald-950/50"
-                        : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                        ? "bg-emerald-950/40 border-emerald-500/70 text-white shadow-sm shadow-emerald-950/50"
+                        : "bg-[#111827] border-[#1f293d] text-slate-400 hover:text-slate-200 hover:bg-[#1a2336]"
                     }`}
                   >
                     <div>
@@ -420,8 +420,8 @@ export default function MT5ExecutionModal() {
                     onClick={() => setSlTpMode("ABSOLUTE_PRICE")}
                     className={`p-3 rounded-lg border cursor-pointer transition flex flex-col justify-between ${
                       slTpMode === "ABSOLUTE_PRICE"
-                        ? "bg-amber-950/30 border-amber-500/70 text-white shadow-sm shadow-amber-950/50"
-                        : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                        ? "bg-amber-950/40 border-amber-500/70 text-white shadow-sm shadow-amber-950/50"
+                        : "bg-[#111827] border-[#1f293d] text-slate-400 hover:text-slate-200 hover:bg-[#1a2336]"
                     }`}
                   >
                     <div>
@@ -443,7 +443,7 @@ export default function MT5ExecutionModal() {
               </div>
 
               {/* Basis Circuit Breaker Slider */}
-              <div className="p-3.5 rounded-lg bg-slate-950/70 border border-slate-800 space-y-2">
+              <div className="p-3.5 rounded-lg bg-[#111827] border border-[#1f293d] space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
                     <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -484,7 +484,7 @@ export default function MT5ExecutionModal() {
                     max="5.0"
                     value={lotSize}
                     onChange={(e) => setLotSize(parseFloat(e.target.value) || 0.01)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white font-mono focus:border-sky-500 outline-none"
+                    className="w-full bg-[#090d16] border border-[#24324b] rounded px-2.5 py-1.5 text-white font-mono focus:border-sky-500 outline-none"
                   />
                   <span className="text-[10px] text-slate-500">e.g. 0.01 = 1 oz Gold / 1,000 units</span>
                 </div>
@@ -499,7 +499,7 @@ export default function MT5ExecutionModal() {
                     max="99"
                     value={minConfidence}
                     onChange={(e) => setMinConfidence(parseInt(e.target.value) || 60)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white font-mono focus:border-sky-500 outline-none"
+                    className="w-full bg-[#090d16] border border-[#24324b] rounded px-2.5 py-1.5 text-white font-mono focus:border-sky-500 outline-none"
                   />
                   <span className="text-[10px] text-slate-500">Filters low-conviction signals</span>
                 </div>
@@ -514,13 +514,13 @@ export default function MT5ExecutionModal() {
                     max="200"
                     value={slippagePoints}
                     onChange={(e) => setSlippagePoints(parseInt(e.target.value) || 30)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white font-mono focus:border-sky-500 outline-none"
+                    className="w-full bg-[#090d16] border border-[#24324b] rounded px-2.5 py-1.5 text-white font-mono focus:border-sky-500 outline-none"
                   />
                   <span className="text-[10px] text-slate-500">Rejects orders if price slips</span>
                 </div>
               </div>
 
-              <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800 space-y-2">
+              <div className="p-3.5 rounded-lg bg-[#111827] border border-[#1f293d] space-y-2.5">
                 <span className="text-[11px] font-bold text-slate-300 block">Bridge Connection</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -529,7 +529,7 @@ export default function MT5ExecutionModal() {
                       type="text"
                       value={bridgeUrl}
                       onChange={(e) => setBridgeUrl(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px] font-mono outline-none"
+                      className="w-full bg-[#090d16] border border-[#24324b] rounded px-2 py-1 text-white text-[11px] font-mono outline-none"
                     />
                   </div>
                   <div className="space-y-1">
@@ -538,7 +538,7 @@ export default function MT5ExecutionModal() {
                       type="password"
                       value={authToken}
                       onChange={(e) => setAuthToken(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px] font-mono outline-none"
+                      className="w-full bg-[#090d16] border border-[#24324b] rounded px-2 py-1 text-white text-[11px] font-mono outline-none"
                     />
                   </div>
                 </div>
@@ -548,7 +548,7 @@ export default function MT5ExecutionModal() {
         </div>
 
         {/* Footer & Kill-Switch */}
-        <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between gap-3">
+        <div className="px-5 py-3 border-t border-[#1f293d] bg-[#090d16] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -575,7 +575,7 @@ export default function MT5ExecutionModal() {
                 </button>
                 <button
                   onClick={() => setConfirmKill(false)}
-                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer"
+                  className="px-2 py-1 rounded bg-[#111827] hover:bg-[#1a2336] text-slate-300 text-xs border border-[#24324b] cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -587,7 +587,7 @@ export default function MT5ExecutionModal() {
                 className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
                   positions.length > 0
                     ? "bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800"
-                    : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                    : "bg-[#111827] text-slate-500 border border-[#1f293d] cursor-not-allowed"
                 }`}
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
@@ -597,7 +597,7 @@ export default function MT5ExecutionModal() {
 
             <button
               onClick={() => setModalOpen(false)}
-              className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
+              className="px-3 py-1 rounded bg-[#111827] hover:bg-[#1a2336] text-white text-xs font-semibold border border-[#24324b] cursor-pointer"
             >
               Done
             </button>

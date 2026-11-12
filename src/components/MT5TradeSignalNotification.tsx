@@ -37,8 +37,8 @@ export default function MT5TradeSignalNotification() {
   };
 
   return (
-    <div className="fixed bottom-14 right-4 z-40 max-w-sm w-full animate-in slide-in-from-bottom-5 duration-300">
-      <div className="bg-[#0f172a]/95 border-2 border-sky-500/80 rounded-xl shadow-2xl p-3.5 backdrop-blur-md text-white flex flex-col gap-2.5">
+    <div className="fixed bottom-14 right-4 z-40 max-w-sm w-full animate-in slide-in-from-bottom-5 duration-300 select-none">
+      <div className="bg-[#0b101b] border-2 border-sky-500/80 rounded-xl shadow-2xl p-3.5 text-white flex flex-col gap-2.5">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -65,7 +65,7 @@ export default function MT5TradeSignalNotification() {
             </span>
             <button
               onClick={dismissAlert}
-              className="text-slate-400 hover:text-white p-0.5 rounded transition"
+              className="text-slate-400 hover:text-white p-0.5 rounded hover:bg-white/10 transition cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -73,7 +73,7 @@ export default function MT5TradeSignalNotification() {
         </div>
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-3 gap-2 bg-slate-900/80 p-2 rounded-lg text-[10px] border border-slate-800">
+        <div className="grid grid-cols-3 gap-2 bg-[#111827] p-2 rounded-lg text-[10px] border border-[#1f293d]">
           <div>
             <span className="text-slate-400 block">Signal Price</span>
             <span className="font-mono font-bold text-slate-200">
@@ -131,7 +131,7 @@ export default function MT5TradeSignalNotification() {
 
           <button
             onClick={dismissAlert}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-[#111827] hover:bg-[#1a2336] text-slate-300 border border-[#24324b] transition cursor-pointer"
           >
             Ignore
           </button>
