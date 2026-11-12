@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   title: "3D Triad Market Analyzer | XAUEUR vs EURUSD vs Time",
   description:
     "Real-Time 3D Phase Space & Multi-Panel Quantitative Market Analyzer Platform powered by Next.js and Firebase.",
-  manifest: "/manifest.json",
+  manifest: "/manifest.json?v=2",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

@@ -9,6 +9,13 @@ import InspectorSidebar from "./InspectorSidebar";
 import ReplayTransportBar from "./ReplayTransportBar";
 import FirebaseWorkspaceModal from "./FirebaseWorkspaceModal";
 import TechnicalGuideModal from "./TechnicalGuideModal";
+import MT5ExecutionModal from "./MT5ExecutionModal";
+import MT5TradeSignalNotification from "./MT5TradeSignalNotification";
+import { useTradeStore } from "@/store/useTradeStore";
+import {
+  computeWhitepaperStrategy,
+  synthesizeCompanionProxySeries,
+} from "@/lib/quant/math";
 import { subscribeAuthState } from "@/lib/firebase/client";
 import { getMarketBarsClient } from "@/lib/client/yahooBrowser";
 import {
@@ -76,6 +83,127 @@ export default function MarketAnalyzerWorkstation() {
     });
     return () => unsub();
   }, [fbConfigTick]);
+
+  // MT5 Broker Store Hooks & Background Sync
+  const pollBridgeStatus = useTradeStore((s) => s.pollBridgeStatus);
+  const sendHeartbeat = useTradeStore((s) => s.sendHeartbeat);
+  const executionMode = useTradeStore((s) => s.executionMode);
+  const minConfidence = useTradeStore((s) => s.minConfidence);
+  const dispatchFromSignal = useTradeStore((s) => s.dispatchFromSignal);
+  const setPendingSignalAlert = useTradeStore((s) => s.setPendingSignalAlert);
+  const dispatchedSignals = useTradeStore((s) => s.dispatchedSignals);
+
+  const dataSeries = useAnalyzerStore((s) => s.dataSeries);
+  const indicators = useAnalyzerStore((s) => s.indicators);
+  const lastProcessedBarTimeRef = useRef<number>(0);
+
+  // Background MT5 Bridge Status Poll (every 8s) & Dead-Man Heartbeat (every 10s)
+  useEffect(() => {
+    pollBridgeStatus();
+    sendHeartbeat();
+    const pollId = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        pollBridgeStatus();
+      }
+    }, 8000);
+
+    const hbId = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        sendHeartbeat();
+      }
+    }, 10000);
+
+    return () => {
+      clearInterval(pollId);
+      clearInterval(hbId);
+    };
+  }, [pollBridgeStatus, sendHeartbeat]);
+
+  // Automated Signal Surveillance Loop (AUTONOMOUS / MANUAL Execution)
+  useEffect(() => {
+    if (executionMode === "OFF" || dataSeries.length === 0) return;
+
+    const latestBar = dataSeries[dataSeries.length - 1];
+    if (!latestBar || latestBar.timestamp === lastProcessedBarTimeRef.current) return;
+    lastProcessedBarTimeRef.current = latestBar.timestamp;
+
+    const maCfg = indicators["vector-ma"];
+    const maPeriod = Number(maCfg?.params?.period ?? 20);
+    const maType = (maCfg?.params?.maType === "EMA" ? "EMA" : "SMA") as
+      | "SMA"
+      | "EMA";
+    const stratCfg = indicators["strategy-signals-3d"]?.params;
+    const stratPeriod = Number(stratCfg?.period ?? 20);
+    const coilThreshold = Number(stratCfg?.coilThreshold ?? 42);
+    const curvatureHookThreshold = Number(
+      stratCfg?.curvatureHookThreshold ?? 0.34
+    );
+    const enableSetup1 =
+      stratCfg?.enableSetup1 !== undefined
+        ? Boolean(stratCfg.enableSetup1)
+        : true;
+    const enableSetup2 =
+      stratCfg?.enableSetup2 !== undefined
+        ? Boolean(stratCfg.enableSetup2)
+        : true;
+    const enableSetup3 =
+      stratCfg?.enableSetup3 !== undefined
+        ? Boolean(stratCfg.enableSetup3)
+        : true;
+    const enableSetup4 =
+      stratCfg?.enableSetup4 !== undefined
+        ? Boolean(stratCfg.enableSetup4)
+        : true;
+    const enableSetup5 =
+      stratCfg?.enableSetup5 !== undefined
+        ? Boolean(stratCfg.enableSetup5)
+        : true;
+
+    const crossProxySeries = synthesizeCompanionProxySeries(
+      dataSeries,
+      triadPair
+    );
+    const stratResult = computeWhitepaperStrategy(dataSeries, {
+      pair: triadPair,
+      period: stratPeriod,
+      maType,
+      coilThreshold,
+      curvatureHookThreshold,
+      minConfidence,
+      enableSetup1,
+      enableSetup2,
+      enableSetup3,
+      enableSetup4,
+      enableSetup5,
+      crossProxySeries,
+    });
+
+    const events = stratResult.events;
+    if (events.length === 0) return;
+    const latestEvent = events[events.length - 1];
+
+    if (latestEvent.barIndex < dataSeries.length - 2) return;
+    if (latestEvent.action !== "BUY" && latestEvent.action !== "SELL") return;
+    if (latestEvent.confidence < minConfidence) return;
+
+    const eventKey = `mt5_${latestEvent.setupId}_${latestEvent.timestamp}_${latestEvent.action.toLowerCase()}`;
+    if (dispatchedSignals[eventKey]) return;
+
+    if (executionMode === "AUTONOMOUS") {
+      dispatchFromSignal(latestEvent).catch(() => {});
+    } else if (executionMode === "MANUAL") {
+      setPendingSignalAlert(latestEvent);
+    }
+  }, [
+    dataSeries,
+    executionMode,
+    triadPair,
+    minConfidence,
+    indicators,
+    dispatchedSignals,
+    dispatchFromSignal,
+    setPendingSignalAlert,
+  ]);
 
   // Client-side fallback generator if network fails completely
   const generateLocalFallback = useCallback(
@@ -358,6 +486,8 @@ export default function MarketAnalyzerWorkstation() {
       />
 
       <TechnicalGuideModal />
+      <MT5ExecutionModal />
+      <MT5TradeSignalNotification />
     </div>
   );
 }
